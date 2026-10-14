@@ -612,6 +612,69 @@ function showToast(msg, type = 'success') {
   setTimeout(() => el.classList.add('hidden'), 4000);
 }
 
+// ─── SPREADSHEET / EXCEL EXPORT UTILITY ──────────────────
+function exportTableToCSV(tableType) {
+  let filename = 'circleup_export.csv';
+  let rows = [];
+
+  if (tableType === 'participants') {
+    filename = 'circleup_participants_roster.csv';
+    rows.push(['CUE ID', 'Full Name', 'Phone', 'Email', 'Gender', 'Pass Type', 'Amount Paid', 'Event Assignment', 'Payment Status', 'Attendance Status']);
+    allParticipants.forEach(p => {
+      const eventInfo = p.events ? `${p.events.event_date} (${p.events.venues?.venue_name || 'Venue'})` : 'Unassigned';
+      rows.push([
+        p.cue_id,
+        `"${p.name}"`,
+        `+91 ${p.phone}`,
+        p.email || '',
+        p.gender,
+        p.ticket_type,
+        p.amount_paid,
+        `"${eventInfo}"`,
+        p.payment_status,
+        p.attendance_status
+      ]);
+    });
+  } else if (tableType === 'events') {
+    filename = 'circleup_events_schedule.csv';
+    rows.push(['Event ID', 'Date', 'Venue Name', 'City', 'Assigned Count']);
+    allEvents.forEach(e => {
+      const count = allParticipants.filter(p => p.event_id === e.id).length;
+      rows.push([
+        `EVT-${e.id}`,
+        e.event_date,
+        `"${e.venues?.venue_name || 'Unknown'}"`,
+        `"${e.venues?.city || ''}"`,
+        count
+      ]);
+    });
+  } else if (tableType === 'venues') {
+    filename = 'circleup_venues_directory.csv';
+    rows.push(['Venue Code', 'Venue Name', 'City', 'Micro Area', 'Full Address', 'Contact Number', 'Landline']);
+    allVenues.forEach(v => {
+      rows.push([
+        v.venue_code,
+        `"${v.venue_name}"`,
+        `"${v.city}"`,
+        `"${v.nearest_area}"`,
+        `"${v.full_address}"`,
+        `+91 ${v.contact_number}`,
+        v.landline_number || ''
+      ]);
+    });
+  }
+
+  const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('Spreadsheet exported successfully!', 'success');
+}
+
 // ─── INITIAL SYSTEM HOOKUP ────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   db.auth.getSession().then(({ data: { session } }) => {

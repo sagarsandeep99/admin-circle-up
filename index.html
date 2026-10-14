@@ -49,7 +49,7 @@
         </div>
       </div>
 
-      <button class="btn-primary full-width" onclick="handleLogin()">Login</button>
+      <button class="btn-primary full-width" onclick="handleLogin()">Sign In</button>
     </div>
   </div>
 
@@ -57,7 +57,9 @@
 
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="logo-mark small">CU</div>
+        <div class="logo-mark small">
+          <img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img">
+        </div>
         <span>CircleUp Console</span>
       </div>
       <nav>
@@ -91,20 +93,22 @@
           <div class="card-header clickable-header" onclick="switchTab('participants')">
             Recent Intake Admissions <span>Manage Directory →</span>
           </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>CUE ID</th>
-                <th>Full Name</th>
-                <th>Gender</th>
-                <th>Pass Type</th>
-                <th>Payment</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="recentTableBody">
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>CUE ID</th>
+                  <th>Full Name</th>
+                  <th>Gender</th>
+                  <th>Pass Type</th>
+                  <th>Payment</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="recentTableBody">
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -134,28 +138,31 @@
               <option value="Pending">Pending Audit</option>
               <option value="Refunded">Refunded Only</option>
             </select>
+            <button class="btn-secondary" onclick="exportTableToCSV('participants')">📥 Export Excel</button>
             <button class="btn-primary" onclick="openParticipantModal()">+ Add New Roster Member</button>
           </div>
         </div>
 
         <div class="card">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID Tag</th>
-                <th>Attendee Metadata</th>
-                <th>Contact Hooks</th>
-                <th>Gender</th>
-                <th>Tier Description</th>
-                <th>Assigned Target Matrix</th>
-                <th>Payment State</th>
-                <th>Status Field</th>
-                <th>System Operations</th>
-              </tr>
-            </thead>
-            <tbody id="participantsTableBody">
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="data-table" id="participantsTable">
+              <thead>
+                <tr>
+                  <th>ID Tag</th>
+                  <th>Attendee Metadata</th>
+                  <th>Contact Hooks</th>
+                  <th>Gender</th>
+                  <th>Tier Description</th>
+                  <th>Assigned Target Matrix</th>
+                  <th>Payment State</th>
+                  <th>Status Field</th>
+                  <th>System Operations</th>
+                </tr>
+              </thead>
+              <tbody id="participantsTableBody">
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -173,25 +180,29 @@
               <option value="all">Full Complete Timeline Log</option>
             </select>
           </div>
-          <button class="btn-primary" style="margin-left: auto;" onclick="openEventModal()">+ Create Scheduled
-            Target</button>
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="btn-secondary" onclick="exportTableToCSV('events')">📥 Export Excel</button>
+            <button class="btn-primary" onclick="openEventModal()">+ Create Scheduled Target</button>
+          </div>
         </div>
 
         <div class="card">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>System Code</th>
-                <th>Configured Date</th>
-                <th>Venue Profile Property</th>
-                <th>City Sector</th>
-                <th>Assigned Roster Ratios</th>
-                <th>Operations</th>
-              </tr>
-            </thead>
-            <tbody id="eventsTableBody">
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="data-table" id="eventsTable">
+              <thead>
+                <tr>
+                  <th>System Code</th>
+                  <th>Configured Date</th>
+                  <th>Venue Profile Property</th>
+                  <th>City Sector</th>
+                  <th>Assigned Roster Ratios</th>
+                  <th>Operations</th>
+                </tr>
+              </thead>
+              <tbody id="eventsTableBody">
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -206,30 +217,36 @@
             <input type="text" id="vSearch" placeholder="Look up property name fragments, micro-locations..."
               oninput="renderVenues()" />
           </div>
-          <button class="btn-primary" onclick="openVenueModal()">+ Log Asset Property</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary" onclick="exportTableToCSV('venues')">📥 Export Excel</button>
+            <button class="btn-primary" onclick="openVenueModal()">+ Log Asset Property</button>
+          </div>
         </div>
 
         <div class="card">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Corporate Commercial Title</th>
-                <th>City Hub</th>
-                <th>Micro Zone</th>
-                <th>Physical Navigation Blocks / Communications</th>
-                <th>Control Actions</th>
-              </tr>
-            </thead>
-            <tbody id="venuesTableBody">
-            </tbody>
-          </table>
+          <div class="table-responsive">
+            <table class="data-table" id="venuesTable">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Corporate Commercial Title</th>
+                  <th>City Hub</th>
+                  <th>Micro Zone</th>
+                  <th>Physical Navigation Blocks / Communications</th>
+                  <th>Control Actions</th>
+                </tr>
+              </thead>
+              <tbody id="venuesTableBody">
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
     </main>
   </div>
 
+  <!-- Modals -->
   <div id="participantModal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
