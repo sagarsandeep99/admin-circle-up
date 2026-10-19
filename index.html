@@ -293,24 +293,36 @@
       <div class="modal-body">
         <input type="hidden" id="vIdHidden" />
         <div class="form-row">
-          <div class="form-group"><label for="vCode">VENUE ID * <span class="hint">(e.g., KP-TOEB-01)</span></label>
-            <input type="text" id="vCode" placeholder="KP-XXXX-XX" style="text-transform: uppercase;" /></div>
-          <div class="form-group"><label for="vCity">City *</label><input type="text" id="vCity" placeholder="Pune" /></div>
+          <div class="form-group"><label for="vCode">Venue ID * <span class="hint">(City-Area-Number)</span></label>
+            <div class="form-row venue-code-row"><input type="text" id="vCodePrefix" placeholder="PUN-VN-" readonly aria-label="Generated city and area code" />
+            <input type="number" id="vCodeNumber" placeholder="001" min="1" step="1" inputmode="numeric" aria-label="Venue number" /></div>
+            <input type="hidden" id="vCode" /></div>
+          <div class="form-group"><label for="vName">Venue Name *</label><input type="text" id="vName" placeholder="The Overpass Brewpub" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label for="vName">Venue Name *</label><input type="text" id="vName" placeholder="The Overpass Brewpub" /></div>
-          <div class="form-group"><label for="vArea">Area *</label><input type="text" id="vArea" placeholder="Koregaon Park" /></div>
+          <div class="form-group"><label for="vCity">City *</label>
+            <select id="vCity" onchange="onVenueCityChange()"><option value="">-- Select City --</option></select></div>
+          <div class="form-group"><label for="vArea">Nearest Area *</label>
+            <select id="vArea" onchange="onVenueAreaChange()"><option value="">-- Select Area --</option></select></div>
         </div>
-        <div class="form-group"><label for="vAddress">Full Address *</label>
+        <div id="vCityOtherGroup" class="form-group hidden"><label for="vCityOther">Enter City *</label><input type="text" id="vCityOther" placeholder="Type city name" /></div>
+        <div id="vAreaOtherGroup" class="form-group hidden"><label for="vAreaOther">Enter Area *</label><input type="text" id="vAreaOther" placeholder="Type area name" /></div>
+        <div class="form-group"><label for="vAddress">Full Address <span class="hint">(Optional)</span></label>
           <input type="text" id="vAddress" placeholder="Plot 24, Lane 7, Near South Main Road..." /></div>
         <div class="form-row">
+          <div class="form-group"><label for="vPincode">Pincode <span class="hint">(Optional)</span></label>
+            <input type="text" id="vPincode" placeholder="6-digit PIN code" maxlength="6" inputmode="numeric" /></div>
+          <div class="form-group"><label for="vState">State *</label>
+            <select id="vState" onchange="onVenueStateChange()"><option value="">-- Select State --</option></select></div>
+        </div>
+        <div id="vStateOtherGroup" class="form-group hidden"><label for="vStateOther">Enter State *</label><input type="text" id="vStateOther" placeholder="Type state name" /></div>
+        <div class="form-row">
           <div class="form-group"><label for="vContact">Contact Number *</label>
-            <div class="phone-input-container"><span class="phone-prefix">+91</span>
-              <input type="text" id="vContact" placeholder="9123456789" maxlength="10" inputmode="numeric" /></div></div>
+            <div class="phone-input-container"><span class="phone-prefix">+91</span><input type="text" id="vContact" placeholder="9123456789" maxlength="10" inputmode="numeric" /></div></div>
           <div class="form-group"><label for="vLandline">Landline Number <span class="hint">(Optional)</span></label>
             <input type="text" id="vLandline" placeholder="Enter landline number" maxlength="11" inputmode="numeric" /></div>
         </div>
-        <div class="form-group"><label for="vComment">Operational Notes <span class="hint">(Optional)</span></label>
+        <div class="form-group"><label for="vComment">Notes <span class="hint">(Optional)</span></label>
           <input type="text" id="vComment" placeholder="Any useful venue details" /></div>
       </div>
       <div class="modal-footer">

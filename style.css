@@ -268,3 +268,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .stats-grid { grid-template-columns: 1fr 1fr; }
   .banner-side { flex-direction: column; align-items: flex-start; }
 }
+/* Venue city/area dropdowns */
+.form-group select:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Venue ID prefix and numeric suffix */
+.venue-code-row { gap: 8px; }
+.venue-code-row #vCodePrefix { flex: 1.35; min-width: 0; color: var(--slate-light); }
+.venue-code-row #vCodeNumber { flex: 1; min-width: 0; }

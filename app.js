@@ -1,5 +1,6 @@
 // ─── STATE ───────────────────────────────────────────────
 let allParticipants = [], allVenues = [], allEvents = [], allCrue = [];
+let allVenueCities = [], allVenueAreas = [];
 let deleteTarget = { type: null, id: null };
 
 const PRICING_MATRIX = {
@@ -108,11 +109,13 @@ function toggleLoginPassword() {
 
 // ─── DATA ────────────────────────────────────────────────
 async function loadAllDataPools() {
-  const [v, e, p, c] = await Promise.all([
+  const [v, e, p, c, cityResult, areaResult] = await Promise.all([
     db.from('venues').select('*').order('venue_name', { ascending: true }),
     db.from('events').select('*, venues(*)').order('event_date', { ascending: true }),
     db.from('participants').select('*, events(*, venues(*))').order('created_at', { ascending: false }),
-    db.from('crue').select('*').order('name', { ascending: true })
+    db.from('crue').select('*').order('name', { ascending: true }),
+    db.from('venue_cities').select('id, name, state_name, city_code, sort_order').order('sort_order', { ascending: true }).order('name', { ascending: true }),
+    db.from('venue_areas').select('id, city_id, name, area_code, sort_order').order('sort_order', { ascending: true }).order('name', { ascending: true })
   ]);
   if (v.error || e.error || p.error || c.error) {
     console.error(v.error || e.error || p.error || c.error);
@@ -122,6 +125,17 @@ async function loadAllDataPools() {
   allEvents = e.data || allEvents;
   allParticipants = p.data || allParticipants;
   allCrue = c.data || allCrue;
+
+  if (cityResult.error || areaResult.error) {
+    console.error('Could not load venue city/area lists:', cityResult.error || areaResult.error);
+    allVenueCities = [];
+    allVenueAreas = [];
+    showToast('City/area lists could not load. Run the venue cities/areas SQL in Supabase.', 'error');
+  } else {
+    allVenueCities = cityResult.data || [];
+    allVenueAreas = areaResult.data || [];
+  }
+
   populateEventDropdowns();
   renderDashboard();
   renderEvents();
@@ -378,45 +392,119 @@ function renderVenues() {
     </tr>`).join('') : emptyRow(6, 'No venues match your search.');
 }
 
+function populateVenueCityDropdown(selectedCity = '') {
+  const select = $('vCity');
+  select.innerHTML = '<option value="">-- Select City --</option>' + allVenueCities.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('') + '<option value="__other__">Others</option>';
+  const match = allVenueCities.find(c => c.name.toLowerCase() === String(selectedCity).toLowerCase());
+  select.value = match ? match.name : (selectedCity ? '__other__' : '');
+  $('vCityOther').value = selectedCity && !match ? selectedCity : '';
+  $('vCityOtherGroup').classList.toggle('hidden', select.value !== '__other__');
+  populateVenueStateDropdown(match?.state_name || '');
+  populateVenueAreaDropdown(selectedCity, '');
+  updateVenueCodePrefix();
+}
+function populateVenueStateDropdown(selectedState = '') {
+  const states = [...new Set(allVenueCities.map(c => c.state_name).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  const select = $('vState');
+  select.innerHTML = '<option value="">-- Select State --</option>' + states.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('') + '<option value="__other__">Others</option>';
+  const known = states.find(x => x.toLowerCase() === String(selectedState).toLowerCase());
+  select.value = known || (selectedState ? '__other__' : '');
+  $('vStateOtherGroup').classList.toggle('hidden', select.value !== '__other__');
+  $('vStateOther').value = selectedState && !known ? selectedState : '';
+}
+function populateVenueAreaDropdown(cityName = '', selectedArea = '') {
+  const select = $('vArea');
+  const cityRow = allVenueCities.find(c => c.name.toLowerCase() === String(cityName).toLowerCase());
+  // Only show areas linked to the selected city. For an unlisted/custom city,
+  // show no predefined areas and allow the user to enter an area manually.
+  const areas = [...allVenueAreas]
+    .filter(a => cityRow && a.city_id === cityRow.id)
+    .sort((a,b) => a.name.localeCompare(b.name));
+  select.innerHTML = '<option value="">-- Select Area --</option>' + areas.map(a =>
+    `<option value="${a.id}">${esc(a.name)}</option>`
+  ).join('') + '<option value="__other__">Others</option>';
+  const match = areas.find(a => a.name.toLowerCase() === String(selectedArea).toLowerCase());
+  select.value = match ? String(match.id) : (selectedArea ? '__other__' : '');
+  $('vAreaOther').value = selectedArea && !match ? selectedArea : '';
+  $('vAreaOtherGroup').classList.toggle('hidden', select.value !== '__other__');
+}
+
+function onVenueStateChange() {
+  const other = $('vState').value === '__other__';
+  $('vStateOtherGroup').classList.toggle('hidden', !other);
+  if (!other) $('vStateOther').value = '';
+}
+function onVenueCityChange() {
+  const value = $('vCity').value;
+  $('vCityOtherGroup').classList.toggle('hidden', value !== '__other__');
+  if (value !== '__other__') $('vCityOther').value = '';
+  const city = allVenueCities.find(c => c.name === value);
+  // City selection updates State and filters Nearest Area to that city.
+  if (city) populateVenueStateDropdown(city.state_name || '');
+  else if (value === '__other__') { $('vState').value = ''; $('vStateOtherGroup').classList.add('hidden'); }
+  const previousArea = getVenueAreaValue();
+  populateVenueAreaDropdown(getVenueCityValue(), previousArea);
+  updateVenueCodePrefix();
+}
+function onVenueAreaChange() {
+  const value = $('vArea').value, other = value === '__other__';
+  $('vAreaOtherGroup').classList.toggle('hidden', !other);
+  if (!other) $('vAreaOther').value = '';
+  // Selecting an area does not change City or State.
+  updateVenueCodePrefix();
+}
+function getVenueCityValue() { return $('vCity').value === '__other__' ? $('vCityOther').value.trim() : $('vCity').value.trim(); }
+function getVenueAreaValue() {
+  if ($('vArea').value === '__other__') return $('vAreaOther').value.trim();
+  return allVenueAreas.find(a => String(a.id) === $('vArea').value)?.name || '';
+}
+function getVenueStateValue() { return $('vState').value === '__other__' ? $('vStateOther').value.trim() : $('vState').value.trim(); }
+function updateVenueCodePrefix() {
+  const city = getVenueCityValue(), area = getVenueAreaValue();
+  const cityCode = allVenueCities.find(c => c.name.toLowerCase() === city.toLowerCase())?.city_code || '';
+  const cityRow = allVenueCities.find(c => c.name.toLowerCase() === city.toLowerCase());
+  const areaCode = allVenueAreas.find(a => a.city_id === cityRow?.id && a.name.toLowerCase() === area.toLowerCase())?.area_code || '';
+  $('vCodePrefix').value = cityCode ? `${cityCode}-${areaCode ? areaCode + '-' : ''}` : '';
+  syncVenueCode();
+}
+function syncVenueCode() { $('vCode').value = `${$('vCodePrefix').value}${String($('vCodeNumber').value || '').trim()}`.toUpperCase(); }
 function openVenueModal(id = null) {
   document.querySelectorAll('#venueModal .invalid').forEach(el => el.classList.remove('invalid'));
   const t = id ? allVenues.find(v => v.id === id) : null;
-  $('vModalTitle').textContent = t ? 'Modify Venue Specifics' : 'Host Properties Entry';
-  $('vIdHidden').value = t?.id ?? '';
-  $('vCode').value = t?.venue_code ?? '';
-  $('vCode').disabled = false; // VENUE ID is user entry$('vCity').value = t?.city ?? '';
-  $('vName').value = t?.venue_name ?? '';
-  $('vArea').value = t?.nearest_area ?? '';
-  $('vAddress').value = t?.full_address ?? '';
-  $('vContact').value = t?.contact_number ?? '';
-  $('vLandline').value = t?.landline_number ?? '';
-  $('vComment').value = t?.notes ?? '';
+  $('vModalTitle').textContent = t ? 'Edit Venue' : 'Add Venue'; $('vIdHidden').value = t?.id ?? '';
+  $('vName').value = t?.venue_name ?? ''; $('vAddress').value = t?.full_address ?? '';
+  $('vContact').value = t?.contact_number ?? ''; $('vLandline').value = t?.landline_number ?? '';
+  $('vComment').value = t?.notes ?? ''; $('vPincode').value = t?.pincode ?? '';
+  populateVenueCityDropdown(t?.city ?? '');
+  populateVenueAreaDropdown(t?.city ?? '', t?.nearest_area ?? '');
+  if (t?.state_name) populateVenueStateDropdown(t.state_name);
+  const existing = String(t?.venue_code || ''), m = existing.match(/^(.*-)(\d+)$/);
+  $('vCodeNumber').value = m ? m[2] : '';
+  if (m) $('vCodePrefix').value = m[1];
+  $('vCodeNumber').oninput = syncVenueCode;
+  if (!existing) updateVenueCodePrefix();
+  $('vCode').value = existing || `${$('vCodePrefix').value}${$('vCodeNumber').value}`;
   showModal('venueModal');
 }
 function closeVenueModal() { hideModal('venueModal'); }
-
 async function saveVenue(btn) {
-  const contactEl = $('vContact'), landlineEl =$('vLandline');
-  if (!checkRequired([[$('vCode'), 'VENUE ID'], [$('vCity'), 'City'], [$('vName'), 'Venue Name'],
-    [$('vArea'), 'Nearest Area'], [$('vAddress'), 'Full Address'], [contactEl, 'Contact Number']])) return;
-
-  const contact = digits(contactEl.value), landline = digits(landlineEl.value);
+  syncVenueCode();
+  const contactEl = $('vContact'), landlineEl = $('vLandline');
+  const city = getVenueCityValue(), area = getVenueAreaValue(), state = getVenueStateValue();
+  if (!checkRequired([[$('vCode'), 'Venue ID'], [$('vName'), 'Venue Name'], [contactEl, 'Contact Number']])) return;
+  if (!city) return flagInvalid($('vCity'), 'Please select or enter a city.');
+  if (!area) return flagInvalid($('vArea'), 'Please select or enter an area.');
+  if (!state) return flagInvalid($('vState'), 'Please select or enter a state.');
+  const contact = digits(contactEl.value), landline = digits(landlineEl.value), pin = digits($('vPincode').value);
   if (contact.length !== 10) return flagInvalid(contactEl, 'Please enter a valid 10-digit contact number.');
   if (landline && (landline.length < 8 || landline.length > 11)) return flagInvalid(landlineEl, 'Landline must be 8–11 digits.');
-
-  const payload = {
-    venue_code: $('vCode').value.trim().toUpperCase(),
-    city: $('vCity').value.trim(),
-    venue_name: $('vName').value.trim(),
-    nearest_area: $('vArea').value.trim(),
-    full_address: $('vAddress').value.trim(),
-    contact_number: contact,
-    landline_number: landline || null,
-    notes: $('vComment').value.trim() || null
-  };
+  if (pin && pin.length !== 6) return flagInvalid($('vPincode'), 'PIN code must be 6 digits.');
+  if (!/^.+-\d+$/.test($('vCode').value.trim())) return flagInvalid($('vCodeNumber'), 'Enter the numeric venue ID suffix.');
+  const payload = { venue_code: $('vCode').value.trim().toUpperCase(), city, state_name: state, pincode: pin || null,
+    venue_name: $('vName').value.trim(), nearest_area: area, full_address: $('vAddress').value.trim(),
+    contact_number: contact, landline_number: landline || null, notes: $('vComment').value.trim() || null };
   await saveRecord('venues', $('vIdHidden').value, payload, 'venue', btn, closeVenueModal);
 }
-
 // ─── CRUE ────────────────────────────────────────────────
 function renderCrue() {
   const q = $('crueSearch').value.toLowerCase().trim();
