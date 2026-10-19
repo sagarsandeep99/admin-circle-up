@@ -1,697 +1,621 @@
-// ─── LOCAL STATE STATE REPOSITORY ────────────────────────
-let allParticipants = [];
-let allVenues = [];
-let allEvents = [];
-let deleteTarget = { type: null, id: null, name: null };
+// ─── STATE ───────────────────────────────────────────────
+let allParticipants = [], allVenues = [], allEvents = [], allCrue = [];
+let deleteTarget = { type: null, id: null };
 
 const PRICING_MATRIX = {
-  "Early Bird – Male": 1800, "Early Bird – Female": 1000,
-  "General – Male": 2100, "General – Female": 1300
+  'Early Bird – Male': 1800, 'Early Bird – Female': 1000,
+  'General – Male': 2100, 'General – Female': 1300
 };
+const MODALS = ['participantModal', 'eventModal', 'venueModal', 'crueModal', 'deleteModal'];
 
-// ─── CONTROLLER BOOT ACTION ──────────────────────────────
-async function handleLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const errEl = document.getElementById('loginError');
-  const btn = document.querySelector('#loginPage .btn-primary');
+// ─── HELPERS ─────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtDate = d => d.split('-').reverse().join('/');
+const digits = s => String(s ?? '').replace(/\D/g, '');
+const todayStr = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
+const isUpcoming = e => e.event_date >= todayStr();
+const countFor = eventId => allParticipants.filter(p => (p.event_ids && p.event_ids.includes(eventId)) || p.event_id === eventId).length;
+const emptyRow = (cols, msg) => `<tr><td colspan="${cols}" class="empty-cell">${msg}</td></tr>`;
 
-  errEl.classList.add('hidden');
-  btn.textContent = 'Verifying Account...';
+function showModal(id) { $(id).classList.remove('hidden'); document.body.classList.add('modal-open'); }
+function hideModal(id) { $(id).classList.add('hidden'); if (!MODALS.some(m => !$(m).classList.contains('hidden'))) document.body.classList.remove('modal-open'); }
+
+function showToast(msg, type = 'success') {
+  const el = $('toast');
+  el.textContent = msg;
+  el.className = `toast ${type}`;
+  clearTimeout(showToast.t);
+  showToast.t = setTimeout(() => el.classList.add('hidden'), 4000);
+}
+
+function checkRequired(fields) {
+  const missing = [];
+  fields.forEach(([el, label]) => {
+    const bad = !el.value.trim();
+    el.classList.toggle('invalid', bad);
+    if (bad) missing.push(label);
+  });
+  if (missing.length) showToast(`Please fill in these fields: ${missing.join(', ')}`, 'error');
+  return !missing.length;
+}
+function flagInvalid(el, msg) { el.classList.add('invalid'); showToast(msg, 'error'); return false; }
+
+async function saveRecord(table, id, payload, label, btn, closeFn) {
   btn.disabled = true;
-
-  const { data, error } = await db.auth.signInWithPassword({ email, password });
-
-  btn.textContent = 'Sign In';
+  const { error } = id
+    ? await db.from(table).update(payload).eq('id', id)
+    : await db.from(table).insert([payload]);
   btn.disabled = false;
-
   if (error) {
-    errEl.textContent = 'Access rejected. Validate credentials or active registration state.';
-    errEl.classList.remove('hidden');
+    console.error(error);
+    showToast(error.code === '23505' ? `That ${label} already exists (duplicate code/ID).` : `Could not save ${label}: ${error.message}`, 'error');
     return;
   }
-  if (data.session) showApp();
+  showToast(`${label[0].toUpperCase() + label.slice(1)} saved successfully!`);
+  closeFn();
+  await loadAllDataPools();
+}
+
+// ─── AUTH ────────────────────────────────────────────────
+async function handleLogin() {
+  const email = $('loginEmail').value.trim();
+  const password = $('loginPassword').value;
+  const errEl = $('loginError'), btn =$('loginBtn');
+  errEl.classList.add('hidden');
+  if (!email || !password) { errEl.textContent = 'Enter your email and password.'; errEl.classList.remove('hidden'); return; }
+
+  btn.textContent = 'Verifying Account...';
+  btn.disabled = true;
+  try {
+    const { data, error } = await db.auth.signInWithPassword({ email, password });
+    if (error || !data.session) throw error || new Error('No session');
+    showApp();
+  } catch (err) {
+    errEl.textContent = 'Sign-in failed. Check your email and password.';
+    errEl.classList.remove('hidden');
+  } finally {
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
+  }
+}
+
+function showLogin() {
+  allParticipants = []; allVenues = []; allEvents = []; allCrue = [];
+  MODALS.forEach(m => $(m).classList.add('hidden'));
+  document.body.classList.remove('modal-open');
+  $('mainApp').classList.add('hidden');
+  $('loginPage').classList.remove('hidden');$('loginPassword').value = '';
 }
 
 async function handleLogout() {
   await db.auth.signOut();
-  document.getElementById('mainApp').classList.add('hidden');
-  document.getElementById('loginPage').classList.remove('hidden');
+  showLogin();
 }
 
 async function showApp() {
-  document.getElementById('loginPage').classList.add('hidden');
-  document.getElementById('mainApp').classList.remove('hidden');
-  setTimeout(async () => {
-    await loadAllDataPools();
-  }, 150);
+  $('loginPage').classList.add('hidden');$('mainApp').classList.remove('hidden');
+  switchTab('dashboard');
+  await loadAllDataPools();
 }
 
-// ─── DATA SYNC OPERATORS ─────────────────────────────────
+function toggleLoginPassword() {
+  const input = $('loginPassword');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  $('eyeIconOpen').classList.toggle('hidden', show);$('eyeIconClosed').classList.toggle('hidden', !show);
+}
+
+// ─── DATA ────────────────────────────────────────────────
 async function loadAllDataPools() {
-  await Promise.all([loadVenues(), loadEvents(), loadParticipants()]);
+  const [v, e, p, c] = await Promise.all([
+    db.from('venues').select('*').order('venue_name', { ascending: true }),
+    db.from('events').select('*, venues(*)').order('event_date', { ascending: true }),
+    db.from('participants').select('*, events(*, venues(*))').order('created_at', { ascending: false }),
+    db.from('crue').select('*').order('name', { ascending: true })
+  ]);
+  if (v.error || e.error || p.error || c.error) {
+    console.error(v.error || e.error || p.error || c.error);
+    showToast('Could not load some data. Check your connection or access.', 'error');
+  }
+  allVenues = v.data || allVenues;
+  allEvents = e.data || allEvents;
+  allParticipants = p.data || allParticipants;
+  allCrue = c.data || allCrue;
   populateEventDropdowns();
   renderDashboard();
   renderEvents();
   renderParticipants();
   renderVenues();
+  renderCrue();
 }
 
-async function loadVenues() {
-  const { data } = await db.from('venues').select('*').order('venue_name', { ascending: true });
-  allVenues = data || [];
-}
-
-async function loadEvents() {
-  const { data } = await db.from('events').select('*, venues(*)').order('event_date', { ascending: true });
-  allEvents = data || [];
-}
-
-async function loadParticipants() {
-  const { data } = await db.from('participants').select('*, events(*, venues(*))').order('created_at', { ascending: false });
-  allParticipants = data || [];
-}
-
-// ─── INTERFACE NAVIGATION ───────────────────────────────
+// ─── NAVIGATION ──────────────────────────────────────────
 function switchTab(tabId) {
   document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  
-  document.getElementById(`${tabId}Section`).classList.remove('hidden');
-  document.getElementById(`nav-${tabId}`).classList.add('active');
-  
-  if(tabId === 'dashboard') renderDashboard();
+  document.querySelectorAll('.nav-item, .mobile-nav-item').forEach(n => n.classList.remove('active'));
+  $(`${tabId}Section`)?.classList.remove('hidden');
+  $(`nav-${tabId}`)?.classList.add('active');
+  $(`mob-nav-${tabId}`)?.classList.add('active');
+  window.scrollTo(0, 0);
 }
 
 function navigateToPastEvents() {
-  document.getElementById('eventTimelineFilter').value = 'past';
+  $('eventTimelineFilter').value = 'past';
+  renderEvents();
   switchTab('events');
 }
 
-// ─── DASHBOARD RENDERING & MIDNIGHT CALCULATOR ───────────
+// ─── DASHBOARD ───────────────────────────────────────────
 function renderDashboard() {
+  const paid = allParticipants.filter(p => p.payment_status === 'Paid');
+  const revenue = paid.reduce((sum, p) => sum + (Number(p.amount_paid) || 0), 0);
+  const stats = [
+    ['Participants', allParticipants.length],
+    ['Paid', paid.length],
+    ['Collected', '₹' + revenue.toLocaleString('en-IN')],
+    ['Upcoming Events', allEvents.filter(isUpcoming).length],
+    ['CrUE Members', allCrue.length]
+  ];
+  $('statsGrid').innerHTML = stats.map(([l, v]) => `<div class="stat-card"><span>${l}</span><strong>${v}</strong></div>`).join('');
+
   renderUpcomingEventBanner();
 
-  const recent = [...allParticipants].slice(0, 6);
-  const tbody = document.getElementById('recentTableBody');
-  tbody.innerHTML = recent.length ? recent.map(p => {
-    const eventContext = p.events 
-      ? `${p.events.event_date.split('-').reverse().join('/')} (${p.events.venues?.venue_code || ''})`
-      : '<span style="color:#fbbf24; font-weight:600;">TBD</span>';
-
-    return `
-      <tr>
-        <td><span class="cue-id">${p.cue_id}</span></td>
-        <td>${p.name}</td>
-        <td>${genderBadge(p.gender)}</td>
-        <td>${p.ticket_type}</td>
-        <td>${paymentBadge(p.payment_status)}</td>
-        <td>${attendanceBadge(p.attendance_status)}</td>
-      </tr>
-    `;
-  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#94A3B8">No participant entries recorded.</td></tr>';
+  const recent = allParticipants.slice(0, 6);
+  $('recentTableBody').innerHTML = recent.length ? recent.map(p => `
+    <tr>
+      <td data-label="CUE ID"><span class="cue-id">${esc(p.cue_id)}</span></td>
+      <td data-label="Full Name">${esc(p.name)}</td>
+      <td data-label="Gender">${genderBadge(p.gender)}</td>
+      <td data-label="Pass Type">${esc(p.ticket_type)}</td>
+      <td data-label="Payment">${paymentBadge(p.payment_status)}</td>
+      <td data-label="Status">${attendanceBadge(p.attendance_status)}</td>
+    </tr>`).join('') : emptyRow(6, 'No participant entries recorded.');
 }
 
 function renderUpcomingEventBanner() {
-  const container = document.getElementById('upcomingEventContainer');
+  const box = $('upcomingEventContainer');
+  const live = allEvents.filter(isUpcoming);
+
   if (!allEvents.length) {
-    container.innerHTML = `<div class="upcoming-event-banner"><div class="event-details"><h3>No Scheduled Events Active</h3></div></div>`;
+    box.innerHTML = `<div class="upcoming-event-banner"><div class="event-details"><h3>No Events Yet</h3></div></div>`;
+    return;
+  }
+  if (!live.length) {
+    box.innerHTML = `<div class="upcoming-event-banner"><div class="event-details"><h3>No Upcoming Events</h3><p>All events are in the past.</p></div>
+      <div class="banner-side"><a href="#" class="banner-corner-link" onclick="navigateToPastEvents(); return false;">View Past Events →</a></div></div>`;
     return;
   }
 
-  const systemNow = new Date();
-  const midnightDeadlineThreshold = new Date(systemNow.getFullYear(), systemNow.getMonth(), systemNow.getDate(), 23, 59, 59, 999);
+  const ev = live[0];
+  const roster = allParticipants.filter(p => (p.event_ids && p.event_ids.includes(ev.id)) || p.event_id === ev.id);
+  const males = roster.filter(p => p.gender === 'Male').length;
+  const [y, m, d] = ev.event_date.split('-').map(Number);
+  const dateStr = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-  const validLiveEvents = allEvents.filter(e => {
-    const [year, month, day] = e.event_date.split('-').map(Number);
-    const calculatedTargetMidnight = new Date(year, month - 1, day, 23, 59, 59, 999);
-    return calculatedTargetMidnight >= midnightDeadlineThreshold;
-  });
-
-  if (!validLiveEvents.length) {
-    container.innerHTML = `
-      <div class="upcoming-event-banner">
-        <div class="event-details">
-          <h3>No Active Upcoming Schedules</h3>
-          <p>All previously logged events have passed their midnight execution cutoff.</p>
-        </div>
-        <a href="#" class="banner-corner-link" onclick="navigateToPastEvents()">View Past Events →</a>
-      </div>
-    `;
-    return;
-  }
-
-  const primaryEvent = validLiveEvents[0];
-  const assignedRosterCount = allParticipants.filter(p => p.event_id === primaryEvent.id).length;
-
-  const [y, m, d] = primaryEvent.event_date.split('-').map(Number);
-  const eventDisplayDate = new Date(y, m - 1, d);
-  const cleanFormattedString = eventDisplayDate.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-  container.innerHTML = `
+  box.innerHTML = `
     <div class="upcoming-event-banner">
       <div class="event-details">
-        <p style="text-transform: uppercase; letter-spacing: 0.1em; color: var(--neon-pink); font-weight:700; font-size:11px;">Next Calendar Matchup</p>
-        <h3>${cleanFormattedString}</h3>
-        <p>Venue Location: <strong>${primaryEvent.venues?.venue_name || 'Unassigned'} (${primaryEvent.venues?.city || ''})</strong></p>
-        <p>Booked Capacity: <strong>${assignedRosterCount} Confirmed Members</strong></p>
+        <p class="banner-eyebrow">Next Event</p>
+        <h3>${dateStr}</h3>
+        <p>Venue: <strong>${esc(ev.venues?.venue_name || 'Unassigned')}${ev.venues?.city ? ` (${esc(ev.venues.city)})` : ''}</strong></p>
+        <p>Participants: <strong>${roster.length} participants</strong> · ${males} male / ${roster.length - males} female</p>
       </div>
-      <div style="text-align: right; display:flex; flex-direction:column; justify-content:space-between; align-items:flex-end;">
-        <span class="event-status-pill">Active Live Monitor</span>
-        <a href="#" class="banner-corner-link" style="margin-top:20px;" onclick="navigateToPastEvents()">View Past Events →</a>
+      <div class="banner-side">
+        <span class="event-status-pill">Upcoming</span>
+        <a href="#" class="banner-corner-link" onclick="navigateToPastEvents(); return false;">View Past Events →</a>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
-// ─── EVENTS DOM CRUD CONTROLLERS ─────────────────────────
+// ─── EVENTS ──────────────────────────────────────────────
 function renderEvents() {
-  const viewMode = document.getElementById('eventTimelineFilter').value;
-  const tbody = document.getElementById('eventsTableBody');
-  const systemNow = new Date();
-  const midnightDeadlineThreshold = new Date(systemNow.getFullYear(), systemNow.getMonth(), systemNow.getDate(), 23, 59, 59, 999);
+  const mode = $('eventTimelineFilter').value;
+  let list = allEvents.filter(e => mode === 'all' || (mode === 'upcoming' ? isUpcoming(e) : !isUpcoming(e)));
+  if (mode === 'past') list = [...list].reverse();
 
-  let filtered = allEvents.filter(e => {
-    const [year, month, day] = e.event_date.split('-').map(Number);
-    const eventMidnight = new Date(year, month - 1, day, 23, 59, 59, 999);
-    if (viewMode === 'upcoming') return eventMidnight >= midnightDeadlineThreshold;
-    if (viewMode === 'past') return eventMidnight < midnightDeadlineThreshold;
-    return true;
-  });
-
-  tbody.innerHTML = filtered.length ? filtered.map(e => {
-    const count = allParticipants.filter(p => p.event_id === e.id).length;
-    return `
-      <tr>
-        <td><strong>#EVT-${e.id}</strong></td>
-        <td>${e.event_date.split('-').reverse().join('/')}</td>
-        <td>${e.venues?.venue_name || 'Error'}</td>
-        <td>${e.venues?.city || ''}</td>
-        <td><span class="cue-id">${count} Assigned</span></td>
-        <td>
-          <div class="action-btns">
-            <button class="btn-edit" onclick="openEventModal(${e.id})">Edit</button>
-            <button class="btn-del" onclick="initiateDelete('event', ${e.id}, '${e.event_date}')">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94A3B8">No schedule targets mapped matching selection criteria.</td></tr>';
+  $('eventsTableBody').innerHTML = list.length ? list.map(e => `
+    <tr>
+      <td data-label="Event ID"><strong>#EVT-${e.id}</strong></td>
+      <td data-label="Date">${fmtDate(e.event_date)}</td>
+      <td data-label="Venue">${esc(e.venues?.venue_name || 'Error')}</td>
+      <td data-label="City">${esc(e.venues?.city || '')}</td>
+      <td data-label="Participants"><span class="cue-id">${countFor(e.id)} Assigned</span></td>
+      <td class="actions-cell"><div class="action-btns">
+        <button class="btn-edit" onclick="openEventModal(${e.id})">Edit</button>
+        <button class="btn-del" onclick="initiateDelete('event', ${e.id})">Delete</button>
+      </div></td>
+    </tr>`).join('') : emptyRow(6, 'No events match the selected timeline.');
 }
 
 function openEventModal(id = null) {
-  const select = document.getElementById('eVenue');
-  select.innerHTML = '<option value="">-- Choose Venue --</option>' + allVenues.map(v => `<option value="${v.id}">${v.venue_name} (${v.city})</option>`).join('');
-  
-  if (id) {
-    document.getElementById('eventModalTitle').textContent = 'Modify Event Configuration';
-    const target = allEvents.find(e => e.id === id);
-    document.getElementById('eventIdHidden').value = target.id;
-    document.getElementById('eDate').value = target.event_date;
-    document.getElementById('eVenue').value = target.venue_id;
-  } else {
-    document.getElementById('eventModalTitle').textContent = 'Create Event Schedule';
-    document.getElementById('eventIdHidden').value = '';
-    document.getElementById('eDate').value = '';
-    document.getElementById('eVenue').value = '';
-  }
-  document.getElementById('eventModal').classList.remove('hidden');
+  $('eVenue').innerHTML = '<option value="">-- Choose Venue --</option>' +
+    allVenues.map(v => `<option value="${v.id}">${esc(v.venue_name)} (${esc(v.city)})</option>`).join('');
+  ['eDate', 'eVenue'].forEach(i => $(i).classList.remove('invalid'));
+
+  const target = id ? allEvents.find(e => e.id === id) : null;
+  $('eventModalTitle').textContent = target ? 'Edit Event' : 'Add Event';
+  $('eventIdHidden').value = target?.id ?? '';
+  $('eDate').value = target?.event_date ?? '';
+  $('eVenue').value = target?.venue_id ?? '';
+  showModal('eventModal');
+}
+function closeEventModal() { hideModal('eventModal'); }
+
+async function saveEvent(btn) {
+  const dateEl = $('eDate'), venueEl =$('eVenue');
+  if (!checkRequired([[dateEl, 'Event Date'], [venueEl, 'Venue']])) return;
+  await saveRecord('events', $('eventIdHidden').value, { event_date: dateEl.value, venue_id: parseInt(venueEl.value, 10) }, 'event', btn, closeEventModal);
 }
 
-function closeEventModal() { document.getElementById('eventModal').classList.add('hidden'); }
-
-async function saveEvent() {
-  const id = document.getElementById('eventIdHidden').value;
-  const eDateEl = document.getElementById('eDate');
-  const eVenueEl = document.getElementById('eVenue');
-
-  eDateEl.style.borderColor = '';
-  eVenueEl.style.borderColor = '';
-
-  let missingFields = [];
-  if (!eDateEl.value) { eDateEl.style.borderColor = 'var(--red)'; missingFields.push('Event Date'); }
-  if (!eVenueEl.value) { eVenueEl.style.borderColor = 'var(--red)'; missingFields.push('Venue'); }
-
-  if (missingFields.length > 0) {
-    showToast(`Please fill in the required fields: ${missingFields.join(', ')}`, 'error');
-    return;
-  }
-
-  const dataPayload = { event_date: eDateEl.value, venue_id: parseInt(eVenueEl.value, 10) };
-  let error;
-
-  if (id) {
-    ({ error } = await db.from('events').update(dataPayload).eq('id', id));
-  } else {
-    ({ error } = await db.from('events').insert([dataPayload]));
-  }
-
-  if (error) { 
-    showToast('Failed to save event details.', 'error'); 
-  } else {
-    showToast('Event saved successfully!', 'success');
-    closeEventModal();
-    await loadAllDataPools();
-  }
-}
-
-// ─── PARTICIPANTS DOM CRUD CONTROLLERS ───────────────────
+// ─── PARTICIPANTS ────────────────────────────────────────
 function renderParticipants() {
-  const query = document.getElementById('pSearch').value.toLowerCase().trim();
-  const targetEventFilter = document.getElementById('filterEvent').value;
-  const genderFilter = document.getElementById('filterGender').value;
-  const paymentFilter = document.getElementById('filterPayment').value;
-  const tbody = document.getElementById('participantsTableBody');
+  const q = $('pSearch').value.toLowerCase().trim();
+  const ev = $('filterEvent').value, gender = $('filterGender').value, pay =$('filterPayment').value;
 
-  let filtered = allParticipants.filter(p => {
-    const textMatch = p.name.toLowerCase().includes(query) || String(p.phone).includes(query) || (p.email && p.email.toLowerCase().includes(query)) || p.cue_id.toLowerCase().includes(query);
-    let eventMatch = true;
-    if (targetEventFilter === 'unassigned') eventMatch = p.event_id === null;
-    else if (targetEventFilter !== 'all') eventMatch = p.event_id === parseInt(targetEventFilter);
-
-    const genderMatch = genderFilter === 'all' || p.gender === genderFilter;
-    const paymentMatch = paymentFilter === 'all' || p.payment_status === paymentFilter;
-
-    return textMatch && eventMatch && genderMatch && paymentMatch;
+  const list = allParticipants.filter(p => {
+    const text = (p.name || '').toLowerCase().includes(q) || String(p.phone ?? '').includes(q) ||
+      (p.email || '').toLowerCase().includes(q) || (p.cue_id || '').toLowerCase().includes(q) || (p.payment_id || '').toLowerCase().includes(q);
+    const eventIds = p.event_ids || (p.event_id ? [p.event_id] : []);
+    const eventOk = ev === 'all' ? true : ev === 'unassigned' ? eventIds.length === 0 : eventIds.includes(parseInt(ev, 10));
+    return text && eventOk && (gender === 'all' || p.gender === gender) && (pay === 'all' || p.payment_status === pay);
   });
 
-  tbody.innerHTML = filtered.length ? filtered.map(p => {
-    const destinationDesc = p.events 
-      ? `${p.events.event_date.split('-').reverse().join('/')} - ${p.events.venues?.venue_name || 'Venue Info Error'}`
-      : '<span style="color:var(--amber); font-weight:700;">TBD / Unassigned</span>';
-
+  $('pCount').textContent = `Showing ${list.length} of ${allParticipants.length} participants`;
+  $('participantsTableBody').innerHTML = list.length ? list.map(p => {
+    const eventIds = p.event_ids || (p.event_id ? [p.event_id] : []);
+    const assignedEvents = eventIds.map(id => allEvents.find(e => e.id === id)).filter(Boolean);
+    const dest = assignedEvents.length
+      ? esc(assignedEvents.map(e => `${fmtDate(e.event_date)} - ${e.venues?.venue_name || 'Venue'}`).join(', '))
+      : '<span style="color:var(--amber);font-weight:700;">TBD / Unassigned</span>';
     return `
-      <tr>
-        <td><span class="cue-id">${p.cue_id}</span></td>
-        <td><strong>${p.name}</strong></td>
-        <td>+91 ${p.phone}<br><span style="font-size:11px;color:var(--slate-light);">${p.email || 'No Email'}</span></td>
-        <td>${genderBadge(p.gender)}</td>
-        <td>${p.ticket_type}<br><span style="font-size:11px;color:var(--slate-light);">₹${p.amount_paid}</span></td>
-        <td><span style="font-size:12px;">${destinationDesc}</span></td>
-        <td>${paymentBadge(p.payment_status)}</td>
-        <td>${attendanceBadge(p.attendance_status)}</td>
-        <td>
-          <div class="action-btns">
-            <button class="btn-edit" onclick="openParticipantModal(${p.id})">Edit</button>
-            <button class="btn-del" onclick="initiateDelete('participant', ${p.id}, '${p.name}')">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('') : '<tr><td colspan="9" style="text-align:center;padding:32px;color:#94A3B8">No participant matching filters active.</td></tr>';
+    <tr>
+      <td data-label="CUE ID"><span class="cue-id">${esc(p.cue_id)}</span></td>
+      <td data-label="Name"><strong>${esc(p.name)}</strong></td>
+      <td data-label="Contact">+91 ${esc(p.phone)}<br><span class="sub">${esc(p.email || 'No Email')}</span></td>
+      <td data-label="Gender">${genderBadge(p.gender)}</td>
+      <td data-label="Ticket Type">${esc(p.ticket_type)}<br><span class="sub">₹${esc(p.amount_paid)}</span></td>
+      <td data-label="Event"><span style="font-size:12px;">${dest}</span></td>
+      <td data-label="Payment">${paymentBadge(p.payment_status)}</td>
+      <td data-label="Payment ID"><span class="sub">${esc(p.payment_id || '-')}</span></td>
+      <td data-label="Attendance">${attendanceBadge(p.attendance_status)}</td>
+      <td class="actions-cell"><div class="action-btns">
+        <button class="btn-edit" onclick="openParticipantModal(${p.id})">Edit</button>
+        <button class="btn-del" onclick="initiateDelete('participant', ${p.id})">Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('') : emptyRow(10, 'No participants match the active filters.');
 }
 
 function openParticipantModal(id = null) {
   populateEventDropdowns();
-  if (id) {
-    document.getElementById('pModalTitle').textContent = 'Edit Profile Information';
-    const target = allParticipants.find(p => p.id === id);
-    document.getElementById('pIdHidden').value = target.id;
-    document.getElementById('pCueId').value = target.cue_id;
-    document.getElementById('pCueId').disabled = true;
-    document.getElementById('pName').value = target.name;
-    document.getElementById('pPhone').value = target.phone;
-    document.getElementById('pEmail').value = target.email || '';
-    document.getElementById('pInstagram').value = target.instagram_id || '';
-    document.getElementById('pGender').value = target.gender;
-    const coreTicket = target.ticket_type.split(' – ')[0] || 'General';
-    document.getElementById('pTicketType').value = coreTicket;
-    document.getElementById('pAmount').value = target.amount_paid;
-    document.getElementById('pEventAssignment').value = target.event_id || '';
-    document.getElementById('pPaymentStatus').value = target.payment_status;
-    document.getElementById('pAttendanceStatus').value = target.attendance_status;
-    document.getElementById('pNotes').value = target.notes || '';
-  } else {
-    document.getElementById('pModalTitle').textContent = 'Register New Roster Participant';
-    document.getElementById('pIdHidden').value = '';
-    document.getElementById('pCueId').value = '';
-    document.getElementById('pCueId').disabled = false;
-    document.getElementById('pName').value = '';
-    document.getElementById('pPhone').value = '';
-    document.getElementById('pEmail').value = '';
-    document.getElementById('pInstagram').value = '';
-    document.getElementById('pNotes').value = '';
-    document.getElementById('pPaymentStatus').value = 'Pending';
-    document.getElementById('pAttendanceStatus').value = 'Registered';
-    updateTicketAndPrice();
-  }
-  document.getElementById('participantModal').classList.remove('hidden');
-}
+  document.querySelectorAll('#participantModal .invalid').forEach(el => el.classList.remove('invalid'));
+  const t = id ? allParticipants.find(p => p.id === id) : null;
 
-function closeParticipantModal() { document.getElementById('participantModal').classList.add('hidden'); }
+  $('pModalTitle').textContent = t ? 'Edit Profile Information' : 'Add Participant';
+  $('pIdHidden').value = t?.id ?? '';
+  $('pCueId').value = t?.cue_id ?? '';
+  $('pCueId').disabled = false; // CUE ID is user entry field$('pName').value = t?.name ?? '';
+  $('pPhone').value = t?.phone ?? '';
+  $('pEmail').value = t?.email ?? '';
+  $('pInstagram').value = t?.instagram_id ?? '';
+  $('pGender').value = t?.gender ?? 'Male';
+  $('pTicketType').value = t ? (t.ticket_type.split(' – ')[0] || 'General') : 'Early Bird';
+  $('pPaymentId').value = t?.payment_id ?? '';
+
+  const eventSelect = $('pEventAssignment');
+  const assignedIds = t?.event_ids || (t?.event_id ? [t.event_id] : []);
+  [...eventSelect.options].forEach(opt => {
+    opt.selected = assignedIds.includes(parseInt(opt.value, 10));
+  });
+
+  $('pPaymentStatus').value = t?.payment_status ?? 'Pending';
+  $('pAttendanceStatus').value = t?.attendance_status ?? 'Registered';
+  $('pNotes').value = t?.notes ?? '';
+  if (t) $('pAmount').value = t.amount_paid; else updateTicketAndPrice();
+  showModal('participantModal');
+}
+function closeParticipantModal() { hideModal('participantModal'); }
 
 function updateTicketAndPrice() {
-  const gender = document.getElementById('pGender').value;
-  const ticketClass = document.getElementById('pTicketType').value;
-  const compositeKey = `${ticketClass} – ${gender}`;
-  document.getElementById('pAmount').value = PRICING_MATRIX[compositeKey] || 1500;
+  const key = `${$('pTicketType').value} – ${$('pGender').value}`;
+  $('pAmount').value = PRICING_MATRIX[key] || 1500;
 }
 
-async function saveParticipant() {
-  const id = document.getElementById('pIdHidden').value;
-  const cueIdEl = document.getElementById('pCueId');
-  const nameEl = document.getElementById('pName');
-  const phoneEl = document.getElementById('pPhone');
-  
-  const email = document.getElementById('pEmail').value.trim();
-  const instagram_id = document.getElementById('pInstagram').value.trim();
-  const gender = document.getElementById('pGender').value;
-  const baseTicket = document.getElementById('pTicketType').value;
-  const amount_paid = parseFloat(document.getElementById('pAmount').value) || 0;
-  const rawEventId = document.getElementById('pEventAssignment').value;
-  const payment_status = document.getElementById('pPaymentStatus').value;
-  const attendance_status = document.getElementById('pAttendanceStatus').value;
-  const notes = document.getElementById('pNotes').value.trim();
+async function saveParticipant(btn) {
+  const cueEl = $('pCueId'), nameEl = $('pName'), phoneEl =$('pPhone'), emailEl = $('pEmail'), amountEl =$('pAmount');
+  if (!checkRequired([[cueEl, 'CUE ID'], [nameEl, 'Full Name'], [phoneEl, 'Phone Number']])) return;
 
-  cueIdEl.style.borderColor = '';
-  nameEl.style.borderColor = '';
-  phoneEl.style.borderColor = '';
+  const phone = digits(phoneEl.value);
+  if (phone.length !== 10) return flagInvalid(phoneEl, 'Please enter a valid 10-digit phone number.');
+  const email = emailEl.value.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return flagInvalid(emailEl, 'Please enter a valid email address.');
+  const amount = parseFloat(amountEl.value) || 0;
+  if (amount < 0) return flagInvalid(amountEl, 'Amount cannot be negative.');
 
-  let missingFields = [];
-  if (!cueIdEl.value.trim()) { cueIdEl.style.borderColor = 'var(--red)'; missingFields.push('CUE ID'); }
-  if (!nameEl.value.trim()) { nameEl.style.borderColor = 'var(--red)'; missingFields.push('Full Name'); }
-  if (!phoneEl.value.replace(/[^0-9]/g, '')) { phoneEl.style.borderColor = 'var(--red)'; missingFields.push('Phone Number'); }
+  const eventSelect = $('pEventAssignment');
+  const event_ids = [...eventSelect.selectedOptions].map(o => parseInt(o.value, 10)).filter(Boolean);
 
-  if (missingFields.length > 0) {
-    showToast(`Please fill in the required fields: ${missingFields.join(', ')}`, 'error');
-    return;
-  }
-
-  const rawPhone = phoneEl.value.replace(/[^0-9]/g, '');
-  if (rawPhone.length !== 10) {
-    phoneEl.style.borderColor = 'var(--red)';
-    showToast('Please enter a valid 10-digit phone number.', 'error');
-    return;
-  }
-
-  const cue_id = cueIdEl.value.trim();
-  const name = nameEl.value.trim();
-  const phone = parseInt(rawPhone, 10);
-  const ticket_type = `${baseTicket} – ${gender}`;
-  const event_id = rawEventId ? parseInt(rawEventId) : null;
-
-  const payload = { cue_id, name, phone, email: email || null, instagram_id: instagram_id || null, gender, ticket_type, amount_paid, event_id, payment_status, attendance_status, notes: notes || null };
-  let error;
-
-  if (id) {
-    ({ error } = await db.from('participants').update(payload).eq('id', id));
-  } else {
-    ({ error } = await db.from('participants').insert([payload]));
-  }
-
-  if (error) { 
-    showToast('Failed to save participant details.', 'error'); 
-  } else {
-    showToast('Participant details saved successfully!', 'success');
-    closeParticipantModal();
-    await loadAllDataPools();
-  }
+  const gender = $('pGender').value;
+  const payload = {
+    cue_id: cueEl.value.trim().toUpperCase(),
+    name: nameEl.value.trim(),
+    phone,
+    email: email || null,
+    instagram_id: $('pInstagram').value.trim().replace(/^@/, '') || null,
+    gender,
+    ticket_type: `${$('pTicketType').value} – ${gender}`,
+    amount_paid: amount,
+    event_ids: event_ids.length ? event_ids : null,
+    event_id: event_ids[0] || null, // backward compatibility
+    payment_id: $('pPaymentId').value.trim() || null,
+    payment_status: $('pPaymentStatus').value,
+    attendance_status: $('pAttendanceStatus').value,
+    notes: $('pNotes').value.trim() || null
+  };
+  await saveRecord('participants', $('pIdHidden').value, payload, 'participant', btn, closeParticipantModal);
 }
 
-// ─── VENUES DOM CRUD CONTROLLERS ─────────────────────────
+// ─── VENUES ──────────────────────────────────────────────
 function renderVenues() {
-  const query = document.getElementById('vSearch').value.toLowerCase().trim();
-  const tbody = document.getElementById('venuesTableBody');
+  const q = $('vSearch').value.toLowerCase().trim();
+  const list = allVenues.filter(v => [v.venue_name, v.venue_code, v.city, v.nearest_area].some(f => (f || '').toLowerCase().includes(q)));
 
-  let filtered = allVenues.filter(v => v.venue_name.toLowerCase().includes(query) || v.venue_code.toLowerCase().includes(query) || v.city.toLowerCase().includes(query) || v.nearest_area.toLowerCase().includes(query));
-
-  tbody.innerHTML = filtered.length ? filtered.map(v => {
-    const landlineStr = v.landline_number ? `<br><span style="font-size:11px;color:var(--slate-light);">LL: ${v.landline_number}</span>` : '';
-    return `
-      <tr>
-        <td><span class="cue-id">${v.venue_code}</span></td>
-        <td><strong>${v.venue_name}</strong></td>
-        <td>${v.city}</td>
-        <td>${v.nearest_area}</td>
-        <td>
-          <span style="font-size:12px;color:var(--slate-light); line-height:1.4; display:block;">${v.full_address}</span>
-          <span style="font-size:11px;color:#ff80ed; font-weight:500; display:block; margin-top:4px;">Mob: +91 ${v.contact_number}${landlineStr}</span>
-        </td>
-        <td>
-          <div class="action-btns">
-            <button class="btn-edit" onclick="openVenueModal(${v.id})">Edit</button>
-            <button class="btn-del" onclick="initiateDelete('venue', ${v.id}, '${v.venue_name}')">Delete</button>
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('') : '<tr><td colspan="6" style="text-align:center;padding:24px;color:#94A3B8">No tracking locations matched lookup criteria.</td></tr>';
+  $('venuesTableBody').innerHTML = list.length ? list.map(v => `
+    <tr>
+      <td data-label="VENUE ID"><span class="cue-id">${esc(v.venue_code)}</span></td>
+      <td data-label="Venue Name"><strong>${esc(v.venue_name)}</strong></td>
+      <td data-label="City">${esc(v.city)}</td>
+      <td data-label="Area">${esc(v.nearest_area)}</td>
+      <td data-label="Address & Contact" class="addr">
+        <span class="sub" style="display:block;line-height:1.4;font-size:12px;">${esc(v.full_address)}</span>
+        <span style="font-size:11px;color:#ff80ed;font-weight:500;display:block;margin-top:4px;">Mob: +91 ${esc(v.contact_number)}${v.landline_number ? `<br>LL: ${esc(v.landline_number)}` : ''}</span>
+      </td>
+      <td class="actions-cell"><div class="action-btns">
+        <button class="btn-edit" onclick="openVenueModal(${v.id})">Edit</button>
+        <button class="btn-del" onclick="initiateDelete('venue', ${v.id})">Delete</button>
+      </div></td>
+    </tr>`).join('') : emptyRow(6, 'No venues match your search.');
 }
 
 function openVenueModal(id = null) {
-  if (id) {
-    document.getElementById('vModalTitle').textContent = 'Modify Venue Specifics';
-    const target = allVenues.find(v => v.id === id);
-    document.getElementById('vIdHidden').value = target.id;
-    document.getElementById('vCode').value = target.venue_code;
-    document.getElementById('vCode').disabled = true;
-    document.getElementById('vCity').value = target.city;
-    document.getElementById('vName').value = target.venue_name;
-    document.getElementById('vArea').value = target.nearest_area;
-    document.getElementById('vAddress').value = target.full_address;
-    document.getElementById('vContact').value = target.contact_number || '';
-    document.getElementById('vLandline').value = target.landline_number || '';
-    document.getElementById('vComment').value = target.notes || '';
-  } else {
-    document.getElementById('vModalTitle').textContent = 'Host Properties Entry';
-    document.getElementById('vIdHidden').value = '';
-    document.getElementById('vCode').value = '';
-    document.getElementById('vCode').disabled = false;
-    document.getElementById('vCity').value = '';
-    document.getElementById('vName').value = '';
-    document.getElementById('vArea').value = '';
-    document.getElementById('vAddress').value = '';
-    document.getElementById('vContact').value = '';
-    document.getElementById('vLandline').value = '';
-    document.getElementById('vComment').value = '';
-  }
-  document.getElementById('venueModal').classList.remove('hidden');
+  document.querySelectorAll('#venueModal .invalid').forEach(el => el.classList.remove('invalid'));
+  const t = id ? allVenues.find(v => v.id === id) : null;
+  $('vModalTitle').textContent = t ? 'Modify Venue Specifics' : 'Host Properties Entry';
+  $('vIdHidden').value = t?.id ?? '';
+  $('vCode').value = t?.venue_code ?? '';
+  $('vCode').disabled = false; // VENUE ID is user entry$('vCity').value = t?.city ?? '';
+  $('vName').value = t?.venue_name ?? '';
+  $('vArea').value = t?.nearest_area ?? '';
+  $('vAddress').value = t?.full_address ?? '';
+  $('vContact').value = t?.contact_number ?? '';
+  $('vLandline').value = t?.landline_number ?? '';
+  $('vComment').value = t?.notes ?? '';
+  showModal('venueModal');
+}
+function closeVenueModal() { hideModal('venueModal'); }
+
+async function saveVenue(btn) {
+  const contactEl = $('vContact'), landlineEl =$('vLandline');
+  if (!checkRequired([[$('vCode'), 'VENUE ID'], [$('vCity'), 'City'], [$('vName'), 'Venue Name'],
+    [$('vArea'), 'Nearest Area'], [$('vAddress'), 'Full Address'], [contactEl, 'Contact Number']])) return;
+
+  const contact = digits(contactEl.value), landline = digits(landlineEl.value);
+  if (contact.length !== 10) return flagInvalid(contactEl, 'Please enter a valid 10-digit contact number.');
+  if (landline && (landline.length < 8 || landline.length > 11)) return flagInvalid(landlineEl, 'Landline must be 8–11 digits.');
+
+  const payload = {
+    venue_code: $('vCode').value.trim().toUpperCase(),
+    city: $('vCity').value.trim(),
+    venue_name: $('vName').value.trim(),
+    nearest_area: $('vArea').value.trim(),
+    full_address: $('vAddress').value.trim(),
+    contact_number: contact,
+    landline_number: landline || null,
+    notes: $('vComment').value.trim() || null
+  };
+  await saveRecord('venues', $('vIdHidden').value, payload, 'venue', btn, closeVenueModal);
 }
 
-function closeVenueModal() { document.getElementById('venueModal').classList.add('hidden'); }
+// ─── CRUE ────────────────────────────────────────────────
+function renderCrue() {
+  const q = $('crueSearch').value.toLowerCase().trim();
+  const list = allCrue.filter(c => [c.name, c.phone, c.email, c.role].some(f => (f || '').toLowerCase().includes(q)));
 
-async function saveVenue() {
-  const id = document.getElementById('vIdHidden').value;
-  const vCodeEl = document.getElementById('vCode');
-  const vCityEl = document.getElementById('vCity');
-  const vNameEl = document.getElementById('vName');
-  const vAreaEl = document.getElementById('vArea');
-  const vAddressEl = document.getElementById('vAddress');
-  const vContactEl = document.getElementById('vContact');
-  
-  const rawLandline = document.getElementById('vLandline').value.replace(/[^0-9]/g, '');
-  const notes = document.getElementById('vComment').value.trim();
+  $('crueTableBody').innerHTML = list.length ? list.map(c => `
+    <tr>
+      <td data-label="Name"><strong>${esc(c.name)}</strong></td>
+      <td data-label="Gender">${genderBadge(c.gender)}</td>
+      <td data-label="Contact">+91 ${esc(c.phone)}<br><span class="sub">${esc(c.email || 'No Email')}</span></td>
+      <td data-label="Role"><span class="cue-id">${esc(c.role)}</span></td>
+      <td data-label="Notes">${esc(c.notes || '-')}</td>
+      <td class="actions-cell"><div class="action-btns">
+        <button class="btn-edit" onclick="openCrueModal(${c.id})">Edit</button>
+        <button class="btn-del" onclick="initiateDelete('crue', ${c.id})">Delete</button>
+      </div></td>
+    </tr>`).join('') : emptyRow(6, 'No CrUE members match your search.');
+}
 
-  const fields = [vCodeEl, vCityEl, vNameEl, vAreaEl, vAddressEl, vContactEl];
-  fields.forEach(el => el.style.borderColor = '');
-
-  let missingFields = [];
-  if (!vCodeEl.value.trim()) { vCodeEl.style.borderColor = 'var(--red)'; missingFields.push('Venue Code'); }
-  if (!vCityEl.value.trim()) { vCityEl.style.borderColor = 'var(--red)'; missingFields.push('City'); }
-  if (!vNameEl.value.trim()) { vNameEl.style.borderColor = 'var(--red)'; missingFields.push('Venue Name'); }
-  if (!vAreaEl.value.trim()) { vAreaEl.style.borderColor = 'var(--red)'; missingFields.push('Nearest Area'); }
-  if (!vAddressEl.value.trim()) { vAddressEl.style.borderColor = 'var(--red)'; missingFields.push('Full Address'); }
-  if (!vContactEl.value.replace(/[^0-9]/g, '')) { vContactEl.style.borderColor = 'var(--red)'; missingFields.push('Contact Number'); }
-
-  if (missingFields.length > 0) {
-    showToast(`Please fill in the required fields: ${missingFields.join(', ')}`, 'error');
-    return;
-  }
-
-  const rawContact = vContactEl.value.replace(/[^0-9]/g, '');
-  if (rawContact.length !== 10) {
-    vContactEl.style.borderColor = 'var(--red)';
-    showToast('Please enter a valid 10-digit contact number.', 'error');
-    return;
-  }
-
-  const venue_code = vCodeEl.value.toUpperCase().trim();
-  const city = vCityEl.value.trim();
-  const venue_name = vNameEl.value.trim();
-  const nearest_area = vAreaEl.value.trim();
-  const full_address = vAddressEl.value.trim();
-  const contact_number = parseInt(rawContact, 10);
-  const landline_number = rawLandline ? parseInt(rawLandline, 10) : null;
-
-  const dataObj = { venue_code, city, venue_name, nearest_area, full_address, contact_number, landline_number, notes: notes || null };
-  let error;
-
-  if (id) {
-    ({ error } = await db.from('venues').update(dataObj).eq('id', id));
+function toggleCrueOtherRole() {
+  const val = $('crueRole').value;
+  const group = $('crueOtherRoleGroup');
+  if (val === 'Other') {
+    group.classList.remove('hidden');
   } else {
-    ({ error } = await db.from('venues').insert([dataObj]));
-  }
-
-  if (error) { 
-    showToast('Failed to save venue details.', 'error'); 
-  } else {
-    showToast('Venue saved successfully!', 'success');
-    closeVenueModal();
-    await loadAllDataPools();
+    group.classList.add('hidden');
+    $('crueRoleOther').value = '';$('crueRoleOther').classList.remove('invalid');
   }
 }
 
-// ─── REUSABLE UTILITIES & FILTER DROPDOWNS ───────────────
+function openCrueModal(id = null) {
+  document.querySelectorAll('#crueModal .invalid').forEach(el => el.classList.remove('invalid'));
+  const t = id ? allCrue.find(c => c.id === id) : null;
+  $('crueModalTitle').textContent = t ? 'Edit CrUE Member' : 'Add CrUE Member';
+  $('crueIdHidden').value = t?.id ?? '';
+  $('crueName').value = t?.name ?? '';
+  $('crueGender').value = t?.gender ?? 'Male';
+  $('cruePhone').value = t?.phone ?? '';
+  $('crueEmail').value = t?.email ?? '';
+
+  const role = t?.role ?? 'Cinematographer';
+  const standardRoles = ['Cinematographer', 'Host', 'Director', 'Operations'];
+  if (standardRoles.includes(role)) {
+    $('crueRole').value = role;
+    $('crueRoleOther').value = '';$('crueOtherRoleGroup').classList.add('hidden');
+  } else {
+    $('crueRole').value = 'Other';$('crueRoleOther').value = role;
+    $('crueOtherRoleGroup').classList.remove('hidden');
+  }
+  $('crueNotes').value = t?.notes ?? '';
+  showModal('crueModal');
+}
+function closeCrueModal() { hideModal('crueModal'); }
+
+async function saveCrue(btn) {
+  const nameEl = $('crueName'), phoneEl =$('cruePhone'), roleEl = $('crueRole'), roleOtherEl =$('crueRoleOther');
+  let roleVal = roleEl.value;
+  if (roleVal === 'Other') {
+    if (!roleOtherEl.value.trim()) {
+      roleOtherEl.classList.add('invalid');
+      showToast('Please specify the custom role.', 'error');
+      return;
+    }
+    roleVal = roleOtherEl.value.trim();
+  }
+  if (!checkRequired([[nameEl, 'Name'], [phoneEl, 'Phone Number']])) return;
+  const phone = digits(phoneEl.value);
+  if (phone.length !== 10) return flagInvalid(phoneEl, 'Please enter a valid 10-digit phone number.');
+
+  const payload = {
+    name: nameEl.value.trim(),
+    gender: $('crueGender').value,
+    phone,
+    email: $('crueEmail').value.trim() || null,
+    role: roleVal,
+    notes: $('crueNotes').value.trim() || null
+  };
+  await saveRecord('crue', $('crueIdHidden').value, payload, 'crue member', btn, closeCrueModal);
+}
+
+// ─── DROPDOWNS ───────────────────────────────────────────
 function populateEventDropdowns() {
-  const masterSelectFilter = document.getElementById('filterEvent');
-  const modalSelectAssignment = document.getElementById('pEventAssignment');
+  const filter = $('filterEvent'), assign =$('pEventAssignment');
+  const prevFilter = filter.value;
+  const prevAssignSelected = [...assign.selectedOptions].map(o => o.value);
+  const opts = allEvents.map(e => `<option value="${e.id}">${esc(`${fmtDate(e.event_date)} -${e.venues?.venue_name || 'Unknown'}`)}</option>`).join('');
 
-  masterSelectFilter.innerHTML = '<option value="all">All Events</option><option value="unassigned">TBD / Unassigned Only</option>';
-  modalSelectAssignment.innerHTML = '<option value="">TBD / Event Not Fixed Yet</option>';
-
-  allEvents.forEach(e => {
-    const readableSegment = `${e.event_date.split('-').reverse().join('/')} - ${e.venues?.venue_name || 'Unknown'}`;
-    masterSelectFilter.innerHTML += `<option value="${e.id}">${readableSegment}</option>`;
-    modalSelectAssignment.innerHTML += `<option value="${e.id}">${readableSegment}</option>`;
+  filter.innerHTML = '<option value="all">All Events</option><option value="unassigned">TBD / Unassigned Only</option>' + opts;
+  assign.innerHTML = opts;
+  filter.value = [...filter.options].some(o => o.value === prevFilter) ? prevFilter : 'all';
+  [...assign.options].forEach(opt => {
+    if (prevAssignSelected.includes(opt.value)) opt.selected = true;
   });
 }
 
-function initiateDelete(type, id, label) {
-  deleteTarget = { type, id, name: label };
-  document.getElementById('deleteTargetName').textContent = label;
-  document.getElementById('deleteModal').classList.remove('hidden');
+// ─── DELETE ──────────────────────────────────────────────
+function initiateDelete(type, id) {
+  let label = '';
+  if (type === 'venue') label = allVenues.find(v => v.id === id)?.venue_name;
+  if (type === 'event') { const e = allEvents.find(x => x.id === id); label = e && `event on ${fmtDate(e.event_date)}`; }
+  if (type === 'participant') label = allParticipants.find(p => p.id === id)?.name;
+  if (type === 'crue') label = allCrue.find(c => c.id === id)?.name;
+  deleteTarget = { type, id };
+  $('deleteTargetName').textContent = label || `this ${type}`;
+  showModal('deleteModal');
 }
+function closeDeleteModal() { hideModal('deleteModal'); }
 
-function closeDeleteModal() { document.getElementById('deleteModal').classList.add('hidden'); }
-
-async function confirmDelete() {
+async function confirmDelete(btn) {
   const { type, id } = deleteTarget;
-  let error;
-
-  if (type === 'venue') ({ error } = await db.from('venues').delete().eq('id', id));
-  if (type === 'event') ({ error } = await db.from('events').delete().eq('id', id));
-  if (type === 'participant') ({ error } = await db.from('participants').delete().eq('id', id));
-
-  if (error) { showToast('Dropping failed. Entity linked dynamically across contexts.', 'error'); } 
-  else {
-    showToast('Entity purged cleanly.', 'success');
-    closeDeleteModal();
-    await loadAllDataPools();
+  const table = { venue: 'venues', event: 'events', participant: 'participants', crue: 'crue' }[type];
+  if (!table) return;
+  btn.disabled = true;
+  const { error } = await db.from(table).delete().eq('id', id);
+  btn.disabled = false;
+  if (error) {
+    console.error(error);
+    showToast(error.code === '23503'
+      ? `Can't delete: this ${type} is still linked to other records.`
+      : `Delete failed: ${error.message}`, 'error');
+    return;
   }
+  showToast('Record deleted.');
+  closeDeleteModal();
+  await loadAllDataPools();
 }
 
-// ─── METADATA GRAPHICAL CHIPS/BADGES ─────────────────────
+// ─── BADGES ──────────────────────────────────────────────
 function paymentBadge(s) {
   const map = { Paid: 'badge-paid', Pending: 'badge-pending', Refunded: 'badge-refunded' };
-  return `<span class="badge ${map[s] || 'badge-pending'}">${s || 'Pending'}</span>`;
+  return `<span class="badge ${map[s] || 'badge-pending'}">${esc(s || 'Pending')}</span>`;
 }
-
-// ─── INTERACTIVE PASSWORD TOGGLE LOGIC ───────────────────
-function toggleLoginPassword() {
-  const passwordInput = document.getElementById('loginPassword');
-  const openEye = document.getElementById('eyeIconOpen');
-  const closedEye = document.getElementById('eyeIconClosed');
-  
-  if (!passwordInput || !openEye || !closedEye) return;
-  
-  if (passwordInput.type === 'password') {
-    passwordInput.type = 'text';
-    openEye.classList.add('hidden');
-    closedEye.classList.remove('hidden');
-  } else {
-    passwordInput.type = 'password';
-    closedEye.classList.add('hidden');
-    openEye.classList.remove('hidden');
-  }
-}
-
 function attendanceBadge(s) {
   const map = { Registered: 'badge-registered', Attended: 'badge-attended', 'No Show': 'badge-noshow', 'Event Over': 'badge-eventover' };
-  return `<span class="badge ${map[s] || 'badge-registered'}">${s || 'Registered'}</span>`;
+  return `<span class="badge ${map[s] || 'badge-registered'}">${esc(s || 'Registered')}</span>`;
 }
-
 function genderBadge(g) {
-  return `<span class="badge ${g === 'Male' ? 'badge-male' : 'badge-female'}">${g}</span>`;
+  return `<span class="badge ${g === 'Male' ? 'badge-male' : 'badge-female'}">${esc(g)}</span>`;
 }
 
-function showToast(msg, type = 'success') {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.className = `toast ${type}`;
-  el.classList.remove('hidden');
-  setTimeout(() => el.classList.add('hidden'), 4000);
-}
+// ─── CSV / EXCEL EXPORT ──────────────────────────────────
+const csvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
 
-// ─── SPREADSHEET / EXCEL EXPORT UTILITY ──────────────────
-function exportTableToCSV(tableType) {
-  let filename = 'circleup_export.csv';
-  let rows = [];
-
-  if (tableType === 'participants') {
+function exportTableToCSV(type) {
+  let filename, rows;
+  if (type === 'participants') {
     filename = 'circleup_participants_roster.csv';
-    rows.push(['CUE ID', 'Full Name', 'Phone', 'Email', 'Gender', 'Pass Type', 'Amount Paid', 'Event Assignment', 'Payment Status', 'Attendance Status']);
+    rows = [['CUE ID', 'Full Name', 'Phone', 'Email', 'Instagram', 'Gender', 'Pass Type', 'Amount Paid', 'Event Assignment', 'Payment Status', 'Payment ID', 'Attendance Status', 'Notes']];
     allParticipants.forEach(p => {
-      const eventInfo = p.events ? `${p.events.event_date} (${p.events.venues?.venue_name || 'Venue'})` : 'Unassigned';
+      const eventIds = p.event_ids || (p.event_id ? [p.event_id] : []);
+      const assignedEvents = eventIds.map(id => allEvents.find(e => e.id === id)).filter(Boolean);
       rows.push([
-        p.cue_id,
-        `"${p.name}"`,
-        `+91 ${p.phone}`,
-        p.email || '',
-        p.gender,
-        p.ticket_type,
-        p.amount_paid,
-        `"${eventInfo}"`,
-        p.payment_status,
-        p.attendance_status
+        p.cue_id, p.name, `+91 ${p.phone}`, p.email, p.instagram_id, p.gender, p.ticket_type, p.amount_paid,
+        assignedEvents.length ? assignedEvents.map(e => `${e.event_date} (${e.venues?.venue_name || 'Venue'})`).join('; ') : 'Unassigned',
+        p.payment_status, p.payment_id, p.attendance_status, p.notes
       ]);
     });
-  } else if (tableType === 'events') {
+  } else if (type === 'events') {
     filename = 'circleup_events_schedule.csv';
-    rows.push(['Event ID', 'Date', 'Venue Name', 'City', 'Assigned Count']);
-    allEvents.forEach(e => {
-      const count = allParticipants.filter(p => p.event_id === e.id).length;
-      rows.push([
-        `EVT-${e.id}`,
-        e.event_date,
-        `"${e.venues?.venue_name || 'Unknown'}"`,
-        `"${e.venues?.city || ''}"`,
-        count
-      ]);
-    });
-  } else if (tableType === 'venues') {
+    rows = [['Event ID', 'Date', 'Venue Name', 'City', 'Assigned Count']];
+    allEvents.forEach(e => rows.push([`EVT-${e.id}`, e.event_date, e.venues?.venue_name || 'Unknown', e.venues?.city, countFor(e.id)]));
+  } else if (type === 'venues') {
     filename = 'circleup_venues_directory.csv';
-    rows.push(['Venue Code', 'Venue Name', 'City', 'Micro Area', 'Full Address', 'Contact Number', 'Landline']);
-    allVenues.forEach(v => {
-      rows.push([
-        v.venue_code,
-        `"${v.venue_name}"`,
-        `"${v.city}"`,
-        `"${v.nearest_area}"`,
-        `"${v.full_address}"`,
-        `+91 ${v.contact_number}`,
-        v.landline_number || ''
-      ]);
-    });
+    rows = [['VENUE ID', 'Venue Name', 'City', 'Micro Area', 'Full Address', 'Contact Number', 'Landline', 'Notes']];
+    allVenues.forEach(v => rows.push([v.venue_code, v.venue_name, v.city, v.nearest_area, v.full_address, `+91 ${v.contact_number}`, v.landline_number, v.notes]));
+  } else if (type === 'crue') {
+    filename = 'circleup_crue_directory.csv';
+    rows = [['Name', 'Gender', 'Phone', 'Email', 'Role', 'Notes']];
+    allCrue.forEach(c => rows.push([c.name, c.gender, `+91 ${c.phone}`, c.email, c.role, c.notes]));
   }
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  showToast('Spreadsheet exported successfully!', 'success');
+  const csv = '\ufeff' + rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast('Spreadsheet exported successfully!');
 }
 
-// ─── INITIAL SYSTEM HOOKUP ────────────────────────────────
+// ─── INIT ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  db.auth.getSession().then(({ data: { session } }) => {
-    if (session) showApp();
+  db.auth.getSession().then(({ data: { session } }) => { if (session) showApp(); });
+
+  db.auth.onAuthStateChange(event => {
+    if (event === 'SIGNED_OUT') setTimeout(showLogin, 0);
   });
 
-  const applyNumericLock = (id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener('keypress', e => { if (!/[0-9]/.test(e.key)) e.preventDefault(); });
-    el.addEventListener('input', function() { this.value = this.value.replace(/[^0-9]/g, ''); });
-  };
-  ['pPhone', 'vContact', 'vLandline'].forEach(applyNumericLock);
+  ['loginEmail', 'loginPassword'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') handleLogin(); }));
 
-  document.querySelectorAll('input[type="date"]').forEach(dateInput => {
-    dateInput.addEventListener('click', () => {
-      try { dateInput.showPicker(); } catch (e) {}
-    });
+  ['pPhone', 'vContact', 'vLandline', 'cruePhone'].forEach(id => $(id).addEventListener('input', function () { this.value = digits(this.value); }));
+
+  document.addEventListener('input', e => e.target.classList?.remove('invalid'));
+  document.addEventListener('change', e => e.target.classList?.remove('invalid'));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') MODALS.forEach(m => hideModal(m));
   });
+  MODALS.forEach(m => $(m).addEventListener('mousedown', e => { if (e.target ===$(m)) hideModal(m); }));
+
+  document.querySelectorAll('input[type="date"]').forEach(d =>
+    d.addEventListener('click', () => { try { d.showPicker(); } catch (_) {} }));
 });

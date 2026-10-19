@@ -1,112 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#090214" />
   <title>CircleUp Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono&display=swap"
-    rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-
 <body>
 
   <div id="loginPage" class="page">
     <div class="login-box">
-      <div class="logo-mark">
-        <img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img">
-      </div>
+      <div class="logo-mark"><img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img"></div>
       <h1>CircleUp Admin</h1>
-
-      <div id="loginError" class="error-msg hidden"></div>
-
+      <div id="loginError" class="error-msg hidden" role="alert"></div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="Enter your email" />
+        <label for="loginEmail">Email *</label>
+        <input type="email" id="loginEmail" placeholder="Enter your email" autocomplete="username" />
       </div>
-
       <div class="form-group">
-        <label>Password</label>
+        <label for="loginPassword">Password *</label>
         <div class="password-input-container">
-          <input type="password" id="loginPassword" placeholder="Enter your password" />
-          <button type="button" id="togglePasswordBtn" class="toggle-password-icon-btn" onclick="toggleLoginPassword()"
-            aria-label="Toggle password visibility">
-            <svg id="eyeIconOpen" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-              stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+          <input type="password" id="loginPassword" placeholder="Enter your password" autocomplete="current-password" />
+          <button type="button" class="toggle-password-icon-btn" onclick="toggleLoginPassword()" aria-label="Toggle password visibility">
+            <svg id="eyeIconOpen" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
               <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
             </svg>
-            <svg id="eyeIconClosed" class="hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-              stroke-width="2" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.822 7.822 3 3m-3-3-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+            <svg id="eyeIconClosed" class="hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.822 7.822 3 3m-3-3-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
             </svg>
           </button>
         </div>
       </div>
-
-      <button class="btn-primary full-width" onclick="handleLogin()">Sign In</button>
+      <button id="loginBtn" class="btn-primary full-width" onclick="handleLogin()">Sign In</button>
     </div>
   </div>
 
   <div id="mainApp" class="hidden">
 
+    <header class="mobile-header">
+      <div class="mobile-logo-area">
+        <div class="logo-mark small"><img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img"></div>
+        <span>CircleUp Console</span>
+      </div>
+      <button class="mobile-logout-btn" onclick="handleLogout()" title="Sign Out" aria-label="Sign Out">🚪</button>
+    </header>
+
     <aside class="sidebar">
       <div class="sidebar-logo">
-        <div class="logo-mark small">
-          <img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img">
-        </div>
+        <div class="logo-mark small"><img src="images/logos/Circle-up-logo-3D.png" alt="Circle Up Logo" class="login-logo-img"></div>
         <span>CircleUp Console</span>
       </div>
       <nav>
-        <a href="#" id="nav-dashboard" class="nav-item active" onclick="switchTab('dashboard')">
-          <span class="nav-icon">📊</span> Dashboard
-        </a>
-        <a href="#" id="nav-participants" class="nav-item" onclick="switchTab('participants')">
-          <span class="nav-icon">👥</span> Participants
-        </a>
-        <a href="#" id="nav-events" class="nav-item" onclick="switchTab('events')">
-          <span class="nav-icon">📅</span> Events Timeline
-        </a>
-        <a href="#" id="nav-venues" class="nav-item" onclick="switchTab('venues')">
-          <span class="nav-icon">📍</span> Venues Directory
-        </a>
+        <a href="#" id="nav-dashboard" class="nav-item active" onclick="switchTab('dashboard'); return false;"><span class="nav-icon">📊</span> Dashboard</a>
+        <a href="#" id="nav-participants" class="nav-item" onclick="switchTab('participants'); return false;"><span class="nav-icon">👥</span> Participants</a>
+        <a href="#" id="nav-events" class="nav-item" onclick="switchTab('events'); return false;"><span class="nav-icon">📅</span> Events Timeline</a>
+        <a href="#" id="nav-venues" class="nav-item" onclick="switchTab('venues'); return false;"><span class="nav-icon">📍</span> Venues Directory</a>
+        <a href="#" id="nav-crue" class="nav-item" onclick="switchTab('crue'); return false;"><span class="nav-icon">🎬</span> CrUE</a>
       </nav>
       <button class="btn-logout" onclick="handleLogout()">Sign Out Account</button>
     </aside>
+
+    <nav class="mobile-bottom-nav">
+      <a href="#" id="mob-nav-dashboard" class="mobile-nav-item active" onclick="switchTab('dashboard'); return false;"><span class="nav-icon">📊</span><span>Stats</span></a>
+      <a href="#" id="mob-nav-participants" class="mobile-nav-item" onclick="switchTab('participants'); return false;"><span class="nav-icon">👥</span><span>Roster</span></a>
+      <a href="#" id="mob-nav-events" class="mobile-nav-item" onclick="switchTab('events'); return false;"><span class="nav-icon">📅</span><span>Events</span></a>
+      <a href="#" id="mob-nav-venues" class="mobile-nav-item" onclick="switchTab('venues'); return false;"><span class="nav-icon">📍</span><span>Venues</span></a>
+      <a href="#" id="mob-nav-crue" class="mobile-nav-item" onclick="switchTab('crue'); return false;"><span class="nav-icon">🎬</span><span>CrUE</span></a>
+    </nav>
 
     <main class="content">
 
       <section id="dashboardSection" class="section">
         <div class="page-header">
-          <h2>Administrative Dashboard</h2>
-          <p>Real-time analytics engine tracking operations metrics and active pipelines.</p>
+          <h2>Dashboard</h2>
+          <p>View your event and participant details at a glance.</p>
         </div>
-
+        <div id="statsGrid" class="stats-grid"></div>
         <div id="upcomingEventContainer"></div>
-
         <div class="card mt24">
-          <div class="card-header clickable-header" onclick="switchTab('participants')">
-            Recent Intake Admissions <span>Manage Directory →</span>
-          </div>
+          <div class="card-header clickable-header" onclick="switchTab('participants')">Recent Participants <span>View Participants →</span></div>
           <div class="table-responsive">
             <table class="data-table">
-              <thead>
-                <tr>
-                  <th>CUE ID</th>
-                  <th>Full Name</th>
-                  <th>Gender</th>
-                  <th>Pass Type</th>
-                  <th>Payment</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="recentTableBody">
-              </tbody>
+              <thead><tr><th>CUE ID</th><th>Full Name</th><th>Gender</th><th>Pass Type</th><th>Payment</th><th>Status</th></tr></thead>
+              <tbody id="recentTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -114,53 +95,32 @@
 
       <section id="participantsSection" class="section hidden">
         <div class="page-header">
-          <h2>Registered Attendees Directory</h2>
-          <p>Filter, manage, adjust match configuration fields or authorize admission checkpoints manually.</p>
+          <h2>Participants</h2>
+          <p>Search, filter, add, and update participants.</p>
         </div>
-
         <div class="toolbar">
           <div class="search-wrap">
-            <input type="text" id="pSearch" placeholder="Search by name, matching CUE ID code, phone tags..."
-              oninput="renderParticipants()" />
+            <input type="search" id="pSearch" placeholder="Search by name, CUE ID code, phone tags..." oninput="renderParticipants()" />
           </div>
           <div class="filter-wrap">
-            <select id="filterEvent" onchange="renderParticipants()">
-              <option value="all">All Events Mapped</option>
-            </select>
+            <select id="filterEvent" onchange="renderParticipants()"><option value="all">All Events</option></select>
             <select id="filterGender" onchange="renderParticipants()">
-              <option value="all">All Genders</option>
-              <option value="Male">Male Only</option>
-              <option value="Female">Female Only</option>
+              <option value="all">All Genders</option><option value="Male">Male Only</option><option value="Female">Female Only</option>
             </select>
             <select id="filterPayment" onchange="renderParticipants()">
-              <option value="all">All Payment Tracks</option>
-              <option value="Paid">Paid Only</option>
-              <option value="Pending">Pending Audit</option>
-              <option value="Refunded">Refunded Only</option>
+              <option value="all">All Payments</option><option value="Paid">Paid Only</option>
+              <option value="Pending">Pending</option><option value="Refunded">Refunded Only</option>
             </select>
             <button class="btn-secondary" onclick="exportTableToCSV('participants')">📥 Export Excel</button>
-            <button class="btn-primary" onclick="openParticipantModal()">+ Add New Roster Member</button>
+            <button class="btn-primary" onclick="openParticipantModal()">+ Add Participant</button>
           </div>
         </div>
-
+        <p class="result-count" id="pCount"></p>
         <div class="card">
           <div class="table-responsive">
             <table class="data-table" id="participantsTable">
-              <thead>
-                <tr>
-                  <th>ID Tag</th>
-                  <th>Attendee Metadata</th>
-                  <th>Contact Hooks</th>
-                  <th>Gender</th>
-                  <th>Tier Description</th>
-                  <th>Assigned Target Matrix</th>
-                  <th>Payment State</th>
-                  <th>Status Field</th>
-                  <th>System Operations</th>
-                </tr>
-              </thead>
-              <tbody id="participantsTableBody">
-              </tbody>
+              <thead><tr><th>CUE ID</th><th>Name</th><th>Contact</th><th>Gender</th><th>Ticket Type</th><th>Event</th><th>Payment</th><th>Payment ID</th><th>Attendance</th><th>Actions</th></tr></thead>
+              <tbody id="participantsTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -168,39 +128,27 @@
 
       <section id="eventsSection" class="section hidden">
         <div class="page-header">
-          <h2>Calendar Schedules Track</h2>
-          <p>Organize, sequence, and dispatch event calendar objects.</p>
+          <h2>Events</h2>
+          <p>Create and manage your events.</p>
         </div>
-
         <div class="toolbar">
           <div class="filter-wrap">
             <select id="eventTimelineFilter" onchange="renderEvents()">
-              <option value="upcoming">Upcoming Live Buffers</option>
-              <option value="past">Archived Historical Targets</option>
-              <option value="all">Full Complete Timeline Log</option>
+              <option value="upcoming">Upcoming Events</option>
+              <option value="past">Past Events</option>
+              <option value="all">All Events</option>
             </select>
           </div>
-          <div style="margin-left: auto; display: flex; gap: 8px;">
+          <div class="toolbar-actions">
             <button class="btn-secondary" onclick="exportTableToCSV('events')">📥 Export Excel</button>
-            <button class="btn-primary" onclick="openEventModal()">+ Create Scheduled Target</button>
+            <button class="btn-primary" onclick="openEventModal()">+ Create Event</button>
           </div>
         </div>
-
         <div class="card">
           <div class="table-responsive">
             <table class="data-table" id="eventsTable">
-              <thead>
-                <tr>
-                  <th>System Code</th>
-                  <th>Configured Date</th>
-                  <th>Venue Profile Property</th>
-                  <th>City Sector</th>
-                  <th>Assigned Roster Ratios</th>
-                  <th>Operations</th>
-                </tr>
-              </thead>
-              <tbody id="eventsTableBody">
-              </tbody>
+              <thead><tr><th>Event ID</th><th>Date</th><th>Venue</th><th>City</th><th>Participants</th><th>Actions</th></tr></thead>
+              <tbody id="eventsTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -208,36 +156,47 @@
 
       <section id="venuesSection" class="section hidden">
         <div class="page-header">
-          <h2>Host Properties Index</h2>
-          <p>Manage commercial footprints, operational capacity data blocks, and anchor sites.</p>
+          <h2>Venues</h2>
+          <p>Add and manage event venues.</p>
         </div>
-
         <div class="toolbar">
           <div class="search-wrap">
-            <input type="text" id="vSearch" placeholder="Look up property name fragments, micro-locations..."
-              oninput="renderVenues()" />
+            <input type="search" id="vSearch" placeholder="Look up property name fragments, micro-locations..." oninput="renderVenues()" />
           </div>
-          <div style="display: flex; gap: 8px;">
+          <div class="toolbar-actions">
             <button class="btn-secondary" onclick="exportTableToCSV('venues')">📥 Export Excel</button>
-            <button class="btn-primary" onclick="openVenueModal()">+ Log Asset Property</button>
+            <button class="btn-primary" onclick="openVenueModal()">+ Add Venue</button>
           </div>
         </div>
-
         <div class="card">
           <div class="table-responsive">
             <table class="data-table" id="venuesTable">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Corporate Commercial Title</th>
-                  <th>City Hub</th>
-                  <th>Micro Zone</th>
-                  <th>Physical Navigation Blocks / Communications</th>
-                  <th>Control Actions</th>
-                </tr>
-              </thead>
-              <tbody id="venuesTableBody">
-              </tbody>
+              <thead><tr><th>VENUE ID</th><th>Venue Name</th><th>City</th><th>Area</th><th>Address & Contact</th><th>Actions</th></tr></thead>
+              <tbody id="venuesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section id="crueSection" class="section hidden">
+        <div class="page-header">
+          <h2>CrUE</h2>
+          <p>Manage CrUE members, roles, and contacts.</p>
+        </div>
+        <div class="toolbar">
+          <div class="search-wrap">
+            <input type="search" id="crueSearch" placeholder="Search by name, phone, role..." oninput="renderCrue()" />
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn-secondary" onclick="exportTableToCSV('crue')">📥 Export Excel</button>
+            <button class="btn-primary" onclick="openCrueModal()">+ Add CrUE Member</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table" id="crueTable">
+              <thead><tr><th>Name</th><th>Gender</th><th>Contact</th><th>Role</th><th>Notes</th><th>Actions</th></tr></thead>
+              <tbody id="crueTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -246,205 +205,184 @@
     </main>
   </div>
 
-  <!-- Modals -->
+  <!-- PARTICIPANT MODAL -->
   <div id="participantModal" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h3 id="pModalTitle">Configure Participant Profile</h3>
-        <button class="modal-close" onclick="closeParticipantModal()">✕</button>
+        <h3 id="pModalTitle">Participant Details</h3>
+        <button class="modal-close" onclick="closeParticipantModal()" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="pIdHidden" />
         <div class="form-row">
-          <div class="form-group">
-            <label>Unique Anchor Identifier Code <span class="hint">(e.g., CUE-050-PN)</span></label>
-            <input type="text" id="pCueId" placeholder="CUE-XXX-XX" style="text-transform: uppercase;" />
-          </div>
-          <div class="form-group">
-            <label>Legal Full Name</label>
-            <input type="text" id="pName" placeholder="Alex Carter" />
-          </div>
+          <div class="form-group"><label for="pCueId">CUE ID * <span class="hint">(e.g., CUE-050-PN)</span></label>
+            <input type="text" id="pCueId" placeholder="CUE-001" style="text-transform: uppercase;" /></div>
+          <div class="form-group"><label for="pName">Full Name *</label>
+            <input type="text" id="pName" placeholder="Alex Carter" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Active Telephone Number <span class="hint">(10-digit mobile hook)</span></label>
-            <div class="phone-input-container">
-              <span class="phone-prefix">+91</span>
-              <input type="text" id="pPhone" placeholder="9876543210" maxlength="10" inputmode="numeric" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Primary Email Address <span class="hint">(Optional validation string)</span></label>
-            <input type="email" id="pEmail" placeholder="alex@domain.com" />
-          </div>
+          <div class="form-group"><label for="pPhone">Phone Number * <span class="hint">(10-digit mobile)</span></label>
+            <div class="phone-input-container"><span class="phone-prefix">+91</span>
+              <input type="text" id="pPhone" placeholder="9876543210" maxlength="10" inputmode="numeric" /></div></div>
+          <div class="form-group"><label for="pEmail">Email <span class="hint">(Optional)</span></label>
+            <input type="email" id="pEmail" placeholder="alex@domain.com" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Instagram Handle Link <span class="hint">(Optional social track)</span></label>
-            <input type="text" id="pInstagram" placeholder="username" />
-          </div>
-          <div class="form-group">
-            <label>Biological Gender Factor</label>
-            <select id="pGender" onchange="updateTicketAndPrice()">
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-          </div>
+          <div class="form-group"><label for="pInstagram">Instagram Handle <span class="hint">(Optional)</span></label>
+            <input type="text" id="pInstagram" placeholder="username" autocapitalize="none" /></div>
+          <div class="form-group"><label for="pGender">Gender *</label>
+            <select id="pGender" onchange="updateTicketAndPrice()"><option value="Male">Male</option><option value="Female">Female</option></select></div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Pass Segment Tier</label>
-            <select id="pTicketType" onchange="updateTicketAndPrice()">
-              <option value="Early Bird">Early Bird Matrix</option>
-              <option value="General">General Access Admission</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Total Account Balance Collected (INR)</label>
-            <input type="number" id="pAmount" placeholder="1500" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Target Event Alignment Assignment</label>
-          <select id="pEventAssignment">
-          </select>
+          <div class="form-group"><label for="pTicketType">Ticket Type *</label>
+            <select id="pTicketType" onchange="updateTicketAndPrice()"><option value="Early Bird">Early Bird</option><option value="General">General</option></select></div>
+          <div class="form-group"><label for="pAmount">Amount Paid (₹) *</label>
+            <input type="number" id="pAmount" placeholder="1500" min="0" inputmode="numeric" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Payment Audit Status</label>
+          <div class="form-group"><label for="pPaymentId">Payment ID <span class="hint">(Optional)</span></label>
+            <input type="text" id="pPaymentId" placeholder="e.g. PAY-12345" /></div>
+          <div class="form-group"><label for="pPaymentStatus">Payment Status *</label>
             <select id="pPaymentStatus">
-              <option value="Pending">Pending Audit Pipeline</option>
-              <option value="Paid">Cleared Verified Success</option>
-              <option value="Refunded">Reversed / Voided Transaction</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Event Gate Attendance Parameter</label>
-            <select id="pAttendanceStatus">
-              <option value="Registered">Registered / Booking Pipeline Active</option>
-              <option value="Attended">Checked-In Valid Entrance</option>
-              <option value="No Show">Absent Core Booking Target</option>
-              <option value="Event Over">Event Over Historical Cycle</option>
-            </select>
-          </div>
+              <option value="Pending">Pending Pipeline</option><option value="Paid">Paid</option><option value="Refunded">Refunded</option>
+            </select></div>
         </div>
-        <div class="form-group">
-          <label>Internal Profile Log Observations</label>
-          <input type="text" id="pNotes" placeholder="VIP priority listing, verified alternative channels..." />
-        </div>
+        <div class="form-group"><label for="pEventAssignment">Assign to Events <span class="hint">(Hold Ctrl/Cmd to select multiple)</span></label>
+          <select id="pEventAssignment" multiple style="height: 110px;"></select></div>
+        <div class="form-group"><label for="pAttendanceStatus">Attendance Status *</label>
+          <select id="pAttendanceStatus">
+            <option value="Registered">Registered</option><option value="Attended">Attended</option>
+            <option value="No Show">No Show</option><option value="Event Over">Event Over</option>
+          </select></div>
+        <div class="form-group"><label for="pNotes">Notes <span class="hint">(Optional)</span></label>
+          <input type="text" id="pNotes" placeholder="VIP priority listing, verified alternative channels..." /></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeParticipantModal()">Cancel</button>
-        <button class="btn-primary" onclick="saveParticipant()">Save Attendee Record</button>
+        <button class="btn-primary" onclick="saveParticipant(this)">Save Participant</button>
       </div>
     </div>
   </div>
 
+  <!-- EVENT MODAL -->
   <div id="eventModal" class="modal-overlay hidden">
-    <div class="modal small">
+    <div class="modal small" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h3 id="eventModalTitle">Build Calendar Matchup Object</h3>
-        <button class="modal-close" onclick="closeEventModal()">✕</button>
+        <h3 id="eventModalTitle">Event Details</h3>
+        <button class="modal-close" onclick="closeEventModal()" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="eventIdHidden" />
-        <div class="form-group">
-          <label>Planned Event Calendar Date Target</label>
-          <input type="date" id="eDate" />
-        </div>
-        <div class="form-group">
-          <label>Link Physical Footprint Venue Asset</label>
-          <select id="eVenue">
-          </select>
-        </div>
+        <div class="form-group"><label for="eDate">Event Date *</label><input type="date" id="eDate" /></div>
+        <div class="form-group"><label for="eVenue">Venue *</label><select id="eVenue"></select></div>
       </div>
       <div class="modal-footer">
-        <button class="btn-secondary" onclick="closeEventModal()">Cancel Matrix</button>
-        <button class="btn-primary" onclick="saveEvent()">Save Event Object</button>
+        <button class="btn-secondary" onclick="closeEventModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveEvent(this)">Save Event</button>
       </div>
     </div>
   </div>
 
+  <!-- VENUE MODAL -->
   <div id="venueModal" class="modal-overlay hidden">
-    <div class="modal">
+    <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h3 id="vModalTitle">Log Facility Architecture Profiles</h3>
-        <button class="modal-close" onclick="closeVenueModal()">✕</button>
+        <h3 id="vModalTitle">Venue Details</h3>
+        <button class="modal-close" onclick="closeVenueModal()" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
         <input type="hidden" id="vIdHidden" />
         <div class="form-row">
-          <div class="form-group">
-            <label>Unique Space Code <span class="hint">(e.g., KP-TOEB-01)</span></label>
-            <input type="text" id="vCode" placeholder="KP-XXXX-XX" style="text-transform: uppercase;" />
-          </div>
-          <div class="form-group">
-            <label>Host Municipality City</label>
-            <input type="text" id="vCity" placeholder="Pune" />
-          </div>
+          <div class="form-group"><label for="vCode">VENUE ID * <span class="hint">(e.g., KP-TOEB-01)</span></label>
+            <input type="text" id="vCode" placeholder="KP-XXXX-XX" style="text-transform: uppercase;" /></div>
+          <div class="form-group"><label for="vCity">City *</label><input type="text" id="vCity" placeholder="Pune" /></div>
         </div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Commercial Space Venture Brand Title Designation</label>
-            <input type="text" id="vName" placeholder="The Overpass Brewpub" />
-          </div>
-          <div class="form-group">
-            <label>Micro Neighborhood Sector</label>
-            <input type="text" id="vArea" placeholder="Koregaon Park" />
-          </div>
+          <div class="form-group"><label for="vName">Venue Name *</label><input type="text" id="vName" placeholder="The Overpass Brewpub" /></div>
+          <div class="form-group"><label for="vArea">Area *</label><input type="text" id="vArea" placeholder="Koregaon Park" /></div>
         </div>
-        <div class="form-group">
-          <label>Geographic Post Address Details Block</label>
-          <input type="text" id="vAddress" placeholder="Plot 24, Lane 7, Near South Main Road..." />
-        </div>
+        <div class="form-group"><label for="vAddress">Full Address *</label>
+          <input type="text" id="vAddress" placeholder="Plot 24, Lane 7, Near South Main Road..." /></div>
         <div class="form-row">
-          <div class="form-group">
-            <label>Primary Manager On-Site Wireless Number</label>
-            <div class="phone-input-container">
-              <span class="phone-prefix">+91</span>
-              <input type="text" id="vContact" placeholder="9123456789" maxlength="10" inputmode="numeric" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Landline Number</label>
-            <input type="text" id="vLandline" placeholder="Digits only (e.g., 0202345678)" maxlength="11"
-              inputmode="numeric" />
-          </div>
+          <div class="form-group"><label for="vContact">Contact Number *</label>
+            <div class="phone-input-container"><span class="phone-prefix">+91</span>
+              <input type="text" id="vContact" placeholder="9123456789" maxlength="10" inputmode="numeric" /></div></div>
+          <div class="form-group"><label for="vLandline">Landline Number <span class="hint">(Optional)</span></label>
+            <input type="text" id="vLandline" placeholder="Enter landline number" maxlength="11" inputmode="numeric" /></div>
         </div>
-        <div class="form-group" style="margin-top: 16px;">
-          <label>Operational Notes</label>
-          <input type="text" id="vComment" placeholder="Rooftop space, dynamic parking entries..." />
-        </div>
+        <div class="form-group"><label for="vComment">Operational Notes <span class="hint">(Optional)</span></label>
+          <input type="text" id="vComment" placeholder="Any useful venue details" /></div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeVenueModal()">Cancel</button>
-        <button class="btn-primary" onclick="saveVenue()">Save Venue</button>
+        <button class="btn-primary" onclick="saveVenue(this)">Save Venue</button>
       </div>
     </div>
   </div>
 
-  <div id="deleteModal" class="modal-overlay hidden">
-    <div class="modal small">
+  <!-- CRUE MODAL -->
+  <div id="crueModal" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h3>Confirm Delete</h3>
-        <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+        <h3 id="crueModalTitle">CrUE Details</h3>
+        <button class="modal-close" onclick="closeCrueModal()" aria-label="Close">✕</button>
       </div>
       <div class="modal-body">
-        <p>Are you sure you want to drop <strong id="deleteTargetName"></strong>? This setup update is permanent.</p>
+        <input type="hidden" id="crueIdHidden" />
+        <div class="form-row">
+          <div class="form-group"><label for="crueName">Name *</label>
+            <input type="text" id="crueName" placeholder="John Doe" /></div>
+          <div class="form-group"><label for="crueGender">Gender *</label>
+            <select id="crueGender"><option value="Male">Male</option><option value="Female">Female</option></select></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label for="cruePhone">Phone Number * <span class="hint">(10-digit mobile)</span></label>
+            <div class="phone-input-container"><span class="phone-prefix">+91</span>
+              <input type="text" id="cruePhone" placeholder="9876543210" maxlength="10" inputmode="numeric" /></div></div>
+          <div class="form-group"><label for="crueEmail">Email <span class="hint">(Optional)</span></label>
+            <input type="email" id="crueEmail" placeholder="john@domain.com" /></div>
+        </div>
+        <div class="form-group"><label for="crueRole">Role *</label>
+          <select id="crueRole" onchange="toggleCrueOtherRole()">
+            <option value="Cinematographer">Cinematographer</option>
+            <option value="Host">Host</option>
+            <option value="Director">Director</option>
+            <option value="Operations">Operations</option>
+            <option value="Other">Other</option>
+          </select></div>
+        <div class="form-group hidden" id="crueOtherRoleGroup"><label for="crueRoleOther">Specify Role *</label>
+          <input type="text" id="crueRoleOther" placeholder="Enter custom role" /></div>
+        <div class="form-group"><label for="crueNotes">Notes <span class="hint">(Optional)</span></label>
+          <input type="text" id="crueNotes" placeholder="Additional details..." /></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick="closeCrueModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveCrue(this)">Save CrUE Member</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE MODAL -->
+  <div id="deleteModal" class="modal-overlay hidden">
+    <div class="modal small" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h3>Confirm Delete</h3>
+        <button class="modal-close" onclick="closeDeleteModal()" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>Are you sure you want to delete <strong id="deleteTargetName"></strong>? This action is permanent.</p>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-        <button class="btn-danger" onclick="confirmDelete()">Delete</button>
+        <button class="btn-danger" onclick="confirmDelete(this)">Delete</button>
       </div>
     </div>
   </div>
 
-  <div id="toast" class="toast hidden"></div>
+  <div id="toast" class="toast hidden" role="status"></div>
 
-  <!-- Supabase CDN and Config must load BEFORE app.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-config.js"></script>
   <script src="app.js"></script>
 </body>
-
 </html>
